@@ -18,7 +18,7 @@ export default function EntrepriseCombo({ value, onChange, placeholder = 'Recher
 
   useEffect(() => {
     const t = setTimeout(() => {
-      api.get(`/entreprises?search=${encodeURIComponent(query)}&pageSize=15`).then((d) => setOptions(d.results));
+      api.get(`/entreprises?search=${encodeURIComponent(query)}&pageSize=15`).then((d) => setOptions(d.results)).catch(() => setOptions([]));
     }, 200);
     return () => clearTimeout(t);
   }, [query, open]);

@@ -29,7 +29,7 @@ export default function BesoinFormModal({ open, onClose, onSaved, besoin, defaul
   }, [open, besoin, defaults]);
 
   useEffect(() => {
-    if (form.entreprise_id) api.get(`/entreprises/${form.entreprise_id}`).then((e) => setContacts(e.contacts || []));
+    if (form.entreprise_id) api.get(`/entreprises/${form.entreprise_id}`).then((e) => setContacts(e.contacts || [])).catch(() => setContacts([]));
     else setContacts([]);
   }, [form.entreprise_id]);
 
