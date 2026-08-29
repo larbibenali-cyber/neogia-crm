@@ -7,7 +7,10 @@ export function PickListsProvider({ children }) {
   const [lists, setLists] = useState({});
   const [loaded, setLoaded] = useState(false);
 
-  const reload = () => api.get('/picklists').then((d) => { setLists(d); setLoaded(true); });
+  const reload = () => api.get('/picklists').then((d) => { setLists(d); setLoaded(true); }).catch(() => {
+    // Pas grave si ça échoue avant connexion (ex. sur /login) : les listes se
+    // rechargeront une fois l'utilisateur authentifié (voir AppShell / RequireAuth).
+  });
 
   useEffect(() => { reload(); }, []);
 
