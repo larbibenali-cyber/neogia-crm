@@ -26,4 +26,26 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-module.exports = { paginate, parseJsonSafe, toTagsArray, generateReference, nowIso };
+// Normalise le statut d'un besoin vers 4 catégories synthétiques stables, utilisées
+// par le tableau de bord ("Besoins par statut") — distinctes du pick-list interne
+// `statut` (lead_a_qualifier, besoin_confirme, ...) et du `statut_source` brut importé
+// (qui peut contenir des variantes de casse/espaces : "A venir ", "a venir ", ...).
+function computeSyntheseStatut(statut, statutSource) {
+  const src = (statutSource || '').trim().toLowerCase();
+  if (src) {
+    if (src === 'a venir' || src === 'à venir') return 'À venir';
+    if (src === 'en cours') return 'En cours';
+    if (src === 'perdu') return 'Perdu';
+    if (src === 'gagne' || src === 'gagné') return 'Gagné';
+    if (src === 'cloture' || src === 'clôturé') return 'Clôturé';
+  }
+  const s = statut || '';
+  if (['lead_a_qualifier', 'besoin_potentiel', 'besoin_confirme'].includes(s)) return 'À venir';
+  if (['recherche_en_cours', 'candidats_positionnes', 'entretiens_en_cours'].includes(s)) return 'En cours';
+  if (s === 'candidat_retenu' || s === 'gagne') return 'Gagné';
+  if (s === 'perdu') return 'Perdu';
+  if (s === 'suspendu' || s === 'cloture') return 'Clôturé';
+  return 'À venir';
+}
+
+module.exports = { paginate, parseJsonSafe, toTagsArray, generateReference, nowIso, computeSyntheseStatut };

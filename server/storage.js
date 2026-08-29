@@ -29,4 +29,26 @@ async function deleteCv(objectPath) {
   if (error) throw new Error(`Échec de la suppression du CV : ${error.message}`);
 }
 
-module.exports = { uploadCv, downloadCv, deleteCv };
+// Logos d'entreprise — Supabase Storage, bucket public "logos" (contrairement aux CV,
+// un logo n'est pas une donnée sensible et doit s'afficher directement dans l'UI).
+const LOGO_BUCKET = 'logos';
+
+async function uploadLogo(entrepriseId, buffer, mime) {
+  const ext = (mime || '').includes('svg') ? 'svg' : (mime || '').includes('png') ? 'png' : (mime || '').includes('webp') ? 'webp' : 'jpg';
+  const objectPath = `${entrepriseId}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabaseAdmin.storage.from(LOGO_BUCKET).upload(objectPath, buffer, {
+    contentType: mime || 'image/png',
+    upsert: false,
+  });
+  if (error) throw new Error(`Échec de l'envoi du logo vers le stockage : ${error.message}`);
+  const { data } = supabaseAdmin.storage.from(LOGO_BUCKET).getPublicUrl(objectPath);
+  return { objectPath, publicUrl: data.publicUrl };
+}
+
+async function deleteLogo(objectPath) {
+  if (!objectPath) return;
+  const { error } = await supabaseAdmin.storage.from(LOGO_BUCKET).remove([objectPath]);
+  if (error) throw new Error(`Échec de la suppression du logo : ${error.message}`);
+}
+
+module.exports = { uploadCv, downloadCv, deleteCv, uploadLogo, deleteLogo };
