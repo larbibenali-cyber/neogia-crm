@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -15,6 +15,7 @@ import Parametres from './pages/Parametres';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import { AuthProvider, useAuth } from './lib/AuthContext';
+import { usePickLists } from './lib/PickListsContext';
 import { Loading } from './components/ui';
 
 function RequireAuth({ children }) {
@@ -27,6 +28,13 @@ function RequireAuth({ children }) {
 
 function AppShell() {
   const { signOut } = useAuth();
+  const { loaded, reload } = usePickLists();
+  useEffect(() => {
+    // Le premier chargement des listes de statuts (au démarrage de l'app, avant
+    // connexion) échoue volontairement (401, voir api.js) : on le relance ici,
+    // une fois qu'on est certain d'être authentifié.
+    if (!loaded) reload();
+  }, [loaded, reload]);
   return (
     <div className="flex min-h-screen">
       <Sidebar />
