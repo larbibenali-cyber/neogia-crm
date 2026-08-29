@@ -18,3 +18,10 @@ backups_manual/
 
 # Frontend compilé : reconstruit à chaque déploiement (voir "build" dans package.json).
 /public/
+
+# Scripts ponctuels d'import (contiennent des rapprochements nominatifs
+# codés en dur avec des données réelles de clients/candidats) : jamais dans
+# le dépôt, usage local unique au moment de l'import.
+import/build_besoins.js
+import/build_candidats.js
+import/emit_candidats_sql.js
