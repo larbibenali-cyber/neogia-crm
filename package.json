@@ -1,0 +1,36 @@
+{
+  "name": "neogia-crm",
+  "version": "1.0.0",
+  "description": "CRM Neogia - cabinet de conseil Data & IA",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "import": "node import/import_excel.js",
+    "server": "node server.js",
+    "dev:server": "nodemon server.js",
+    "build:client": "cd client && npm install && npm run build",
+    "build": "npm run build:client",
+    "start": "node server.js",
+    "setup": "npm install && cd client && npm install && npm run build && cd .. && node import/import_excel.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
+    "archiver": "^7.0.1",
+    "cors": "^2.8.5",
+    "csv-stringify": "^6.5.1",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1",
+    "pg": "^8.23.0",
+    "unzipper": "^0.12.5",
+    "uuid": "^9.0.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}
