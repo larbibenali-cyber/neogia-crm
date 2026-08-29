@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Archive, Building2, User, MapPin, Calendar, Clock, Euro,
-  Target, CheckCircle2, XCircle, Sparkles, Plus,
+  Target, CheckCircle2, XCircle, Sparkles, Plus, Trash2, History, UserPlus,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Loading, EmptyState, Modal, Field, Select, Avatar } from '../../components/ui';
 import StatusBadge from '../../components/StatusBadge';
 import TechCloud from '../../components/TechCloud';
 import BesoinFormModal from '../../components/BesoinFormModal';
+import CandidatCombo from '../../components/CandidatCombo';
 import { usePickLists } from '../../lib/PickListsContext';
 import { useToast } from '../../lib/ToastContext';
 import { useConfirm } from '../../lib/ConfirmContext';
@@ -22,6 +23,7 @@ export default function BesoinDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [suggestions, setSuggestions] = useState(null);
   const [positionModal, setPositionModal] = useState({ open: false, candidat: null });
+  const [etapeModal, setEtapeModal] = useState({ open: false, positionnement: null });
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -51,6 +53,13 @@ export default function BesoinDetail() {
     load();
   };
 
+  const deletePositionnement = async (p) => {
+    if (!(await confirm({ title: 'Supprimer ce positionnement ?', message: `${p.candidat_prenom} ${p.candidat_nom} sera retiré de ce besoin. Cette action est irréversible.` }))) return;
+    await api.del(`/positionnements/${p.id}`);
+    toast('Positionnement supprimé.', 'success');
+    load();
+  };
+
   return (
     <div className="space-y-5">
       <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm text-slate2-500 hover:text-brand">
@@ -70,6 +79,7 @@ export default function BesoinDetail() {
           <div className="flex items-center gap-2">
             <StatusBadge category="besoin_priorite" value={besoin.priorite} />
             <StatusBadge category="besoin_status" value={besoin.statut} />
+            <button className="btn btn-primary" onClick={() => setPositionModal({ open: true, candidat: null })}><UserPlus size={14} /> Positionner un candidat</button>
             <button className="btn btn-secondary" onClick={() => setEditOpen(true)}><Pencil size={14} /> Modifier</button>
             <button className="btn btn-danger" onClick={archive}><Archive size={14} /> Clôturer</button>
           </div>
@@ -143,6 +153,8 @@ export default function BesoinDetail() {
                         <select className="input !py-1 !text-xs w-auto" value={p.statut} onChange={(e) => updatePositionStatus(p.id, e.target.value)}>
                           <PositionStatusOptions />
                         </select>
+                        <button className="btn btn-ghost !py-1 !px-2 !text-xs" onClick={() => setEtapeModal({ open: true, positionnement: p })}><History size={13} /> Étape</button>
+                        <button className="btn btn-ghost !py-1 !px-2 !text-xs text-red-500 hover:text-red-600" onClick={() => deletePositionnement(p)}><Trash2 size={13} /></button>
                       </div>
                     </div>
                     <div className="flex gap-4 text-xs text-slate2-500 mt-2">
@@ -152,6 +164,22 @@ export default function BesoinDetail() {
                     </div>
                     {p.commentaires && <p className="text-sm text-slate2-600 mt-2">{p.commentaires}</p>}
                     {p.retour_client && <p className="text-sm text-slate2-600 mt-1 italic">Retour client : {p.retour_client}</p>}
+                    {p.etapes && p.etapes.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-slate2-100">
+                        <div className="text-xs font-semibold text-slate2-500 mb-1.5">Historique</div>
+                        <ul className="space-y-1">
+                          {p.etapes.map((e) => (
+                            <li key={e.id} className="text-xs text-slate2-500 flex gap-2">
+                              <span className="text-slate2-400 shrink-0">{formatDate(e.date_etape)}</span>
+                              <span>
+                                {e.statut_apres && <strong className="text-slate2-700">{e.statut_apres} — </strong>}
+                                {e.commentaire_original || (e.type_etape === 'positionnement' ? 'Positionnement créé' : e.type_etape === 'changement_statut' ? 'Changement de statut' : '')}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -202,10 +230,16 @@ export default function BesoinDetail() {
       <BesoinFormModal open={editOpen} onClose={() => setEditOpen(false)} besoin={besoin} onSaved={load} />
       <PositionnementModal
         open={positionModal.open}
-        candidat={positionModal.candidat}
+        initialCandidat={positionModal.candidat}
         besoinId={besoin.id}
         onClose={() => setPositionModal({ open: false, candidat: null })}
         onSaved={() => { load(); setTab('details'); }}
+      />
+      <EtapeModal
+        open={etapeModal.open}
+        positionnement={etapeModal.positionnement}
+        onClose={() => setEtapeModal({ open: false, positionnement: null })}
+        onSaved={load}
       />
     </div>
   );
@@ -216,27 +250,112 @@ function PositionStatusOptions() {
   return getOptions('positionnement_status').map((o) => <option key={o.value} value={o.value}>{o.label}</option>);
 }
 
-function PositionnementModal({ open, candidat, besoinId, onClose, onSaved }) {
+function PositionnementModal({ open, initialCandidat, besoinId, onClose, onSaved }) {
+  const [candidatId, setCandidatId] = useState('');
+  const [statut, setStatut] = useState('positionne');
+  const [date, setDate] = useState('');
   const [tjm, setTjm] = useState('');
   const [commentaires, setCommentaires] = useState('');
+  const [saving, setSaving] = useState(false);
+  const { getOptions } = usePickLists();
   const toast = useToast();
-  useEffect(() => { setTjm(''); setCommentaires(''); }, [open]);
-  if (!candidat) return null;
+
+  useEffect(() => {
+    if (open) {
+      setCandidatId(initialCandidat ? initialCandidat.id : '');
+      setStatut('positionne');
+      setDate(new Date().toISOString().slice(0, 10));
+      setTjm('');
+      setCommentaires('');
+    }
+  }, [open, initialCandidat]);
+
+  if (!open) return null;
+
   const submit = async () => {
+    if (!candidatId) return toast('Merci de sélectionner un candidat.', 'error');
+    setSaving(true);
     try {
-      await api.post('/positionnements', { candidat_id: candidat.id, besoin_id: besoinId, tjm_propose: tjm || null, commentaires });
-      toast(`${candidat.prenom} ${candidat.nom} positionné sur ce besoin.`, 'success');
+      await api.post('/positionnements', {
+        candidat_id: candidatId, besoin_id: besoinId, statut,
+        date_positionnement: date || undefined, tjm_propose: tjm || null, commentaires,
+      });
+      toast('Candidat positionné sur ce besoin.', 'success');
       onSaved();
       onClose();
     } catch (err) { toast(err.message, 'error'); }
+    finally { setSaving(false); }
   };
+
   return (
-    <Modal open={open} onClose={onClose} title={`Positionner ${candidat.prenom} ${candidat.nom}`}>
-      <Field label="TJM proposé (€)"><input type="number" className="input" value={tjm} onChange={(e) => setTjm(e.target.value)} /></Field>
-      <Field label="Commentaires internes"><textarea className="input" rows={3} value={commentaires} onChange={(e) => setCommentaires(e.target.value)} /></Field>
+    <Modal open={open} onClose={onClose} title="Positionner un candidat">
+      <Field label="Candidat" required>
+        {initialCandidat
+          ? <div className="input flex items-center gap-2 bg-slate2-50">{initialCandidat.prenom} {initialCandidat.nom}</div>
+          : <CandidatCombo value={candidatId} onChange={setCandidatId} />}
+      </Field>
+      <div className="grid md:grid-cols-2 gap-x-4">
+        <Field label="Statut du positionnement">
+          <Select value={statut} onChange={(e) => setStatut(e.target.value)}>
+            {getOptions('positionnement_status').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </Select>
+        </Field>
+        <Field label="Date"><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+        <Field label="TJM proposé (€)"><input type="number" className="input" value={tjm} onChange={(e) => setTjm(e.target.value)} /></Field>
+      </div>
+      <Field label="Commentaire"><textarea className="input" rows={3} value={commentaires} onChange={(e) => setCommentaires(e.target.value)} /></Field>
       <div className="flex justify-end gap-2 mt-4">
         <button className="btn btn-ghost" onClick={onClose}>Annuler</button>
-        <button className="btn btn-primary" onClick={submit}>Confirmer le positionnement</button>
+        <button className="btn btn-primary" disabled={saving} onClick={submit}>{saving ? 'Enregistrement...' : 'Confirmer le positionnement'}</button>
+      </div>
+    </Modal>
+  );
+}
+
+function EtapeModal({ open, positionnement, onClose, onSaved }) {
+  const [date, setDate] = useState('');
+  const [commentaire, setCommentaire] = useState('');
+  const [nouveauStatut, setNouveauStatut] = useState('');
+  const [saving, setSaving] = useState(false);
+  const { getOptions } = usePickLists();
+  const toast = useToast();
+
+  useEffect(() => {
+    if (open) {
+      setDate(new Date().toISOString().slice(0, 10));
+      setCommentaire('');
+      setNouveauStatut('');
+    }
+  }, [open, positionnement]);
+
+  if (!open || !positionnement) return null;
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      await api.post(`/positionnements/${positionnement.id}/etapes`, {
+        date_etape: date, commentaire, nouveau_statut: nouveauStatut || undefined,
+      });
+      toast('Étape ajoutée à l\'historique.', 'success');
+      onSaved();
+      onClose();
+    } catch (err) { toast(err.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Ajouter une étape — ${positionnement.candidat_prenom} ${positionnement.candidat_nom}`}>
+      <Field label="Date"><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+      <Field label="Commentaire"><textarea className="input" rows={3} value={commentaire} onChange={(e) => setCommentaire(e.target.value)} /></Field>
+      <Field label="Nouveau statut (optionnel)">
+        <Select value={nouveauStatut} onChange={(e) => setNouveauStatut(e.target.value)}>
+          <option value="">— Ne pas changer le statut —</option>
+          {getOptions('positionnement_status').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </Select>
+      </Field>
+      <div className="flex justify-end gap-2 mt-4">
+        <button className="btn btn-ghost" onClick={onClose}>Annuler</button>
+        <button className="btn btn-primary" disabled={saving} onClick={submit}>{saving ? 'Enregistrement...' : 'Ajouter l\'étape'}</button>
       </div>
     </Modal>
   );
