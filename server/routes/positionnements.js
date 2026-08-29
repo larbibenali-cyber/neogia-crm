@@ -25,6 +25,23 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.get('/:id', async (req, res, next) => {
+  try {
+    const p = await dbGet(`
+      SELECT p.*, c.nom as candidat_nom, c.prenom as candidat_prenom, b.titre as besoin_titre, b.reference as besoin_reference,
+        e.nom as entreprise_nom
+      FROM positionnements p
+      JOIN candidats c ON c.id = p.candidat_id
+      JOIN besoins b ON b.id = p.besoin_id
+      JOIN entreprises e ON e.id = b.entreprise_id
+      WHERE p.id = ?
+    `, [req.params.id]);
+    if (!p) return res.status(404).json({ error: 'Positionnement introuvable' });
+    p.etapes = await dbAll('SELECT * FROM positionnement_etapes WHERE positionnement_id = ? ORDER BY ordre ASC, id ASC', [p.id]);
+    res.json(p);
+  } catch (err) { next(err); }
+});
+
 router.post('/', async (req, res, next) => {
   try {
     const b = req.body;
@@ -33,7 +50,15 @@ router.post('/', async (req, res, next) => {
     const besoin = await dbGet('SELECT * FROM besoins WHERE id = ?', [b.besoin_id]);
     if (!candidat || !besoin) return res.status(404).json({ error: 'Candidat ou besoin introuvable' });
 
-    const { score } = await computeMatchScore(besoin, candidat);
+    let score = null;
+    try {
+      ({ score } = await computeMatchScore(besoin, candidat));
+    } catch (e) {
+      // Le score de compatibilité est une aide à la décision indicative : s'il ne
+      // peut pas être calculé (données manquantes...), le positionnement doit
+      // pouvoir être créé quand même plutôt que d'échouer entièrement.
+      console.error('computeMatchScore a échoué, positionnement créé sans score :', e);
+    }
 
     try {
       const row = await dbGet(`
@@ -42,14 +67,18 @@ router.post('/', async (req, res, next) => {
       `, {
         candidat_id: b.candidat_id, besoin_id: b.besoin_id,
         date_positionnement: b.date_positionnement || new Date().toISOString().slice(0, 10),
-        tjm_propose: b.tjm_propose ?? null, statut: b.statut || 'a_etudier',
+        tjm_propose: (b.tjm_propose === '' || b.tjm_propose === undefined) ? null : Number(b.tjm_propose),
+        statut: b.statut || 'positionne',
         commentaires: b.commentaires || '', date_entretien: b.date_entretien || null,
         retour_client: b.retour_client || '', score,
       });
-      // Le besoin passe automatiquement en "candidats positionnés" s'il était encore en recherche
-      if (['lead_a_qualifier', 'besoin_potentiel', 'besoin_confirme', 'recherche_en_cours'].includes(besoin.statut)) {
-        await dbRun(`UPDATE besoins SET statut = 'candidats_positionnes', updated_at = now() WHERE id = ?`, [besoin.id]);
-      }
+      // Historique : première étape automatique traçant la création du positionnement.
+      await dbRun(`
+        INSERT INTO positionnement_etapes (positionnement_id, ordre, date_etape, type_etape, commentaire_original, statut_apres, source, created_at)
+        VALUES (?, 1, ?, 'positionnement', ?, ?, 'saisie_manuelle', now())
+      `, [row.id, b.date_positionnement || new Date().toISOString().slice(0, 10), b.commentaires || '', b.statut || 'positionne']);
+      // NB : le statut du BESOIN n'est jamais modifié automatiquement ici — l'avancement
+      // des candidats se pilote uniquement via le statut du positionnement, comme demandé.
       if (['qualifie', 'disponible', 'a_contacter', 'contacte'].includes(candidat.statut)) {
         await dbRun(`UPDATE candidats SET statut = 'positionne', updated_at = now() WHERE id = ?`, [candidat.id]);
       }
@@ -68,22 +97,59 @@ router.put('/:id', async (req, res, next) => {
     const existing = await dbGet('SELECT * FROM positionnements WHERE id = ?', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Positionnement introuvable' });
     const b = req.body;
+    const tjm_propose = b.tjm_propose !== undefined ? (b.tjm_propose === '' ? null : Number(b.tjm_propose)) : existing.tjm_propose;
     await dbRun(`
       UPDATE positionnements SET tjm_propose=@tjm_propose, statut=@statut, commentaires=@commentaires,
         date_entretien=@date_entretien, retour_client=@retour_client, updated_at=now()
       WHERE id=@id
     `, {
       id: req.params.id,
-      tjm_propose: b.tjm_propose ?? existing.tjm_propose, statut: b.statut ?? existing.statut,
+      tjm_propose, statut: b.statut ?? existing.statut,
       commentaires: b.commentaires ?? existing.commentaires, date_entretien: b.date_entretien ?? existing.date_entretien,
       retour_client: b.retour_client ?? existing.retour_client,
     });
+    // Si le statut change, on trace automatiquement une étape dans l'historique
+    // (en plus des étapes ajoutées manuellement via /:id/etapes).
+    if (b.statut && b.statut !== existing.statut) {
+      const nextOrdre = ((await dbGet('SELECT COALESCE(MAX(ordre), 0)::int AS n FROM positionnement_etapes WHERE positionnement_id = ?', [req.params.id])).n) + 1;
+      await dbRun(`
+        INSERT INTO positionnement_etapes (positionnement_id, ordre, date_etape, type_etape, commentaire_original, statut_apres, source, created_at)
+        VALUES (?, ?, ?, 'changement_statut', ?, ?, 'saisie_manuelle', now())
+      `, [req.params.id, nextOrdre, new Date().toISOString().slice(0, 10), b.etape_commentaire || '', b.statut]);
+    }
     res.json(await dbGet('SELECT * FROM positionnements WHERE id = ?', [req.params.id]));
+  } catch (err) { next(err); }
+});
+
+// ---- Historique (étapes) d'un positionnement ----
+router.post('/:id/etapes', async (req, res, next) => {
+  try {
+    const existing = await dbGet('SELECT * FROM positionnements WHERE id = ?', [req.params.id]);
+    if (!existing) return res.status(404).json({ error: 'Positionnement introuvable' });
+    const b = req.body || {};
+    const nextOrdre = ((await dbGet('SELECT COALESCE(MAX(ordre), 0)::int AS n FROM positionnement_etapes WHERE positionnement_id = ?', [req.params.id])).n) + 1;
+    const row = await dbGet(`
+      INSERT INTO positionnement_etapes (positionnement_id, ordre, date_etape, heure, type_etape, commentaire_original, statut_apres, source, created_at)
+      VALUES (@positionnement_id, @ordre, @date_etape, @heure, @type_etape, @commentaire_original, @statut_apres, 'saisie_manuelle', now())
+      RETURNING id
+    `, {
+      positionnement_id: req.params.id, ordre: nextOrdre,
+      date_etape: b.date_etape || new Date().toISOString().slice(0, 10), heure: b.heure || null,
+      type_etape: b.type_etape || 'note', commentaire_original: b.commentaire || '',
+      statut_apres: b.nouveau_statut || null,
+    });
+    if (b.nouveau_statut) {
+      await dbRun('UPDATE positionnements SET statut = ?, updated_at = now() WHERE id = ?', [b.nouveau_statut, req.params.id]);
+    }
+    res.status(201).json(await dbGet('SELECT * FROM positionnement_etapes WHERE id = ?', [row.id]));
   } catch (err) { next(err); }
 });
 
 router.delete('/:id', async (req, res, next) => {
   try {
+    const existing = await dbGet('SELECT * FROM positionnements WHERE id = ?', [req.params.id]);
+    if (!existing) return res.status(404).json({ error: 'Positionnement introuvable' });
+    await dbRun('DELETE FROM positionnement_etapes WHERE positionnement_id = ?', [req.params.id]);
     await dbRun('DELETE FROM positionnements WHERE id = ?', [req.params.id]);
     res.json({ deleted: true });
   } catch (err) { next(err); }

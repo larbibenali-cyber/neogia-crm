@@ -86,7 +86,7 @@ router.post('/echanges/:id/create-besoin', async (req, res, next) => {
       INSERT INTO besoins (
         reference, titre, entreprise_id, contact_id, description_contexte, statut, priorite,
         source, echange_origine_id, created_at, updated_at
-      ) VALUES (@reference, @titre, @entreprise_id, @contact_id, @description_contexte, 'lead_a_qualifier', 'normale',
+      ) VALUES (@reference, @titre, @entreprise_id, @contact_id, @description_contexte, 'a_venir', 'normale',
         'Échange client', @echange_origine_id, now(), now()) RETURNING id
     `, {
       reference,

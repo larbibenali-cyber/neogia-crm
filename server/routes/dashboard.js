@@ -51,7 +51,7 @@ router.get('/', async (req, res, next) => {
           (SELECT COUNT(*)::int FROM positionnements p WHERE p.besoin_id = bb.id) AS nb_candidats,
           EXISTS (
             SELECT 1 FROM positionnements p WHERE p.besoin_id = bb.id
-              AND p.statut IN ('presente_au_client', 'en_attente_retour', 'entretien_planifie', 'entretien_realise')
+              AND p.statut IN ('cv_envoye', 'en_attente_retour', 'entretien_planifie', 'entretien_realise')
           ) AS attente_retour
         FROM besoins bb JOIN entreprises e ON e.id = bb.entreprise_id
         WHERE bb.archived = false AND bb.statut_synthese IN ('À venir', 'En cours')

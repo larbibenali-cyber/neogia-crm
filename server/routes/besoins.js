@@ -18,6 +18,12 @@ async function attachExtras(b) {
     FROM positionnements p JOIN candidats c ON c.id = p.candidat_id
     WHERE p.besoin_id = ? ORDER BY p.date_positionnement DESC
   `, [b.id]);
+  for (const p of b.positionnements) {
+    p.etapes = await dbAll(
+      `SELECT * FROM positionnement_etapes WHERE positionnement_id = ? ORDER BY ordre ASC, id ASC`,
+      [p.id]
+    );
+  }
   return b;
 }
 
@@ -101,7 +107,7 @@ router.post('/', async (req, res, next) => {
     const tjm_candidat = b.tjm_candidat !== undefined && b.tjm_candidat !== '' ? Number(b.tjm_candidat) : null;
     const marge = (tjm_client !== null && tjm_candidat !== null) ? tjm_client - tjm_candidat : null;
 
-    const statutInitial = b.statut || 'lead_a_qualifier';
+    const statutInitial = b.statut || 'a_venir';
     const row = await dbGet(`
       INSERT INTO besoins (
         reference, titre, entreprise_id, contact_id, description_contexte, missions, competences_obligatoires,
@@ -137,7 +143,7 @@ router.post('/', async (req, res, next) => {
 router.put('/:id', async (req, res, next) => {
   try {
     const existing = await dbGet('SELECT * FROM besoins WHERE id = ?', [req.params.id]);
-    if (!existing) return res.status(404).json({ error: 'Besoin introuvable' });
+  if (!existing) return res.status(404).json({ error: 'Besoin introuvable' });
     const b = req.body;
     const tjm_client = b.tjm_client !== undefined ? (b.tjm_client === '' ? null : Number(b.tjm_client)) : existing.tjm_client;
     const tjm_candidat = b.tjm_candidat !== undefined ? (b.tjm_candidat === '' ? null : Number(b.tjm_candidat)) : existing.tjm_candidat;
