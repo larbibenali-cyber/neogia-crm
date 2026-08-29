@@ -9,7 +9,7 @@ router.get('/', async (req, res, next) => {
     const totalContacts = (await dbGet('SELECT COUNT(*) c FROM contacts WHERE archived = false')).c;
     const totalCandidats = (await dbGet('SELECT COUNT(*) c FROM candidats WHERE archived = false')).c;
     const besoinsOuverts = (await dbGet(`
-      SELECT COUNT(*) c FROM besoins WHERE archived = false AND statut NOT IN ('gagne','perdu','cloture')
+      SELECT COUNT(*) c FROM besoins WHERE archived = false AND statut_synthese IN ('À venir', 'En cours')
     `)).c;
 
     const today = new Date().toISOString().slice(0, 10);
@@ -31,9 +31,53 @@ router.get('/', async (req, res, next) => {
       JOIN entreprises e ON e.id = c.entreprise_id ORDER BY c.created_at DESC LIMIT 8
     `);
 
-    const besoinsParStatut = await dbAll(`
-      SELECT statut, COUNT(*) n FROM besoins WHERE archived = false GROUP BY statut
+    // Regroupement par statut normalisé (À venir / En cours / Perdu / Gagné / Clôturé) —
+    // distinct du pick-list interne `statut`, aligné sur le statut réel importé des besoins.
+    const besoinsParStatutRows = await dbAll(`
+      SELECT statut_synthese AS groupe, COUNT(*)::int n FROM besoins WHERE archived = false GROUP BY statut_synthese
     `);
+    const ordreGroupes = ['En cours', 'À venir', 'Gagné', 'Perdu', 'Clôturé'];
+    const besoinsParStatut = ordreGroupes
+      .map((g) => ({ groupe: g, n: besoinsParStatutRows.find((r) => r.groupe === g)?.n || 0 }))
+      .filter((r) => r.n > 0);
+
+    // "Besoins prioritaires" — un besoin apparaît une seule fois, classé sur le premier
+    // critère qu'il remplit dans l'ordre : 1) en cours, 2) échéance proche (<=14j),
+    // 3) sans candidat positionné, 4) en attente de retour client, 5) à venir.
+    const besoinsPrioritaires = await dbAll(`
+      WITH b AS (
+        SELECT bb.id, bb.titre, bb.reference, bb.statut, bb.statut_synthese, bb.date_demarrage, bb.date_limite_reponse,
+          bb.date_identification, bb.priorite, e.id AS entreprise_id, e.nom AS entreprise_nom,
+          (SELECT COUNT(*)::int FROM positionnements p WHERE p.besoin_id = bb.id) AS nb_candidats,
+          EXISTS (
+            SELECT 1 FROM positionnements p WHERE p.besoin_id = bb.id
+              AND p.statut IN ('presente_au_client', 'en_attente_retour', 'entretien_planifie', 'entretien_realise')
+          ) AS attente_retour
+        FROM besoins bb JOIN entreprises e ON e.id = bb.entreprise_id
+        WHERE bb.archived = false AND bb.statut_synthese IN ('À venir', 'En cours')
+      )
+      SELECT *,
+        CASE
+          WHEN statut_synthese = 'En cours' THEN 1
+          WHEN (date_demarrage IS NOT NULL AND date_demarrage BETWEEN @today AND @in14)
+            OR (date_limite_reponse IS NOT NULL AND date_limite_reponse BETWEEN @today AND @in14) THEN 2
+          WHEN nb_candidats = 0 THEN 3
+          WHEN attente_retour THEN 4
+          ELSE 5
+        END AS priorite_rang,
+        CASE
+          WHEN statut_synthese = 'En cours' THEN 'Besoin en cours'
+          WHEN (date_demarrage IS NOT NULL AND date_demarrage BETWEEN @today AND @in14)
+            OR (date_limite_reponse IS NOT NULL AND date_limite_reponse BETWEEN @today AND @in14) THEN 'Échéance proche'
+          WHEN nb_candidats = 0 THEN 'Sans candidat positionné'
+          WHEN attente_retour THEN 'En attente de retour client'
+          ELSE 'Besoin à venir'
+        END AS priorite_motif,
+        COALESCE(date_demarrage, date_limite_reponse, date_identification) AS date_cle
+      FROM b
+      ORDER BY priorite_rang ASC, date_cle ASC NULLS LAST
+      LIMIT 10
+    `, { today, in14 });
 
     const candidatsPositionnesRecemment = await dbAll(`
       SELECT p.*, c.nom as candidat_nom, c.prenom as candidat_prenom, b.titre as besoin_titre, ent.nom as entreprise_nom
@@ -51,7 +95,7 @@ router.get('/', async (req, res, next) => {
     const besoinsSansCandidat = await dbAll(`
       SELECT b.id, b.titre, b.reference, e.nom as entreprise_nom FROM besoins b
       JOIN entreprises e ON e.id = b.entreprise_id
-      WHERE b.archived = false AND b.statut NOT IN ('gagne','perdu','cloture')
+      WHERE b.archived = false AND b.statut_synthese IN ('À venir', 'En cours')
         AND NOT EXISTS (SELECT 1 FROM positionnements p WHERE p.besoin_id = b.id)
       LIMIT 10
     `);
@@ -69,6 +113,7 @@ router.get('/', async (req, res, next) => {
       derniers_echanges: derniersEchanges,
       dernieres_fiches: dernieresFiches,
       besoins_par_statut: besoinsParStatut,
+      besoins_prioritaires: besoinsPrioritaires,
       candidats_positionnes_recemment: candidatsPositionnesRecemment,
       alertes: {
         relances_en_retard: relancesEnRetard,
