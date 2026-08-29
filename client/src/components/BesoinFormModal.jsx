@@ -10,7 +10,7 @@ const EMPTY = {
   titre: '', entreprise_id: '', contact_id: '', description_contexte: '', missions: '',
   technologies_obligatoires: [], technologies_appreciees: [], niveau_experience: '', localisation: '',
   teletravail: '', date_demarrage: '', duree_estimee: '', tjm_client: '', tjm_candidat: '',
-  priorite: 'normale', date_limite_reponse: '', source: 'Module Besoins', notes_internes: '', statut: 'lead_a_qualifier',
+  priorite: 'normale', date_limite_reponse: '', source: 'Module Besoins', notes_internes: '', statut: 'a_venir',
 };
 
 export default function BesoinFormModal({ open, onClose, onSaved, besoin, defaults }) {
