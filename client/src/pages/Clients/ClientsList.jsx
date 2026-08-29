@@ -1,22 +1,177 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Filter, Mail, Phone, ArrowUpDown, Download, X, Archive } from 'lucide-react';
-import { api, qs } from '../../lib/api';
+import { Plus, Filter, Mail, Phone, ArrowUpDown, Download, X, Users, Building2 } from 'lucide-react';
+import { api, qs, downloadFile } from '../../lib/api';
 import { Loading, Pagination, EmptyState, Avatar } from '../../components/ui';
 import StatusBadge from '../../components/StatusBadge';
+import { EntrepriseLogo, EntrepriseStatusBadge } from '../../components/EntrepriseBadges';
 import { TechTag } from '../../components/TechCloud';
 import ContactFormModal from '../../components/ContactFormModal';
 import { usePickLists } from '../../lib/PickListsContext';
-import { formatDate } from '../../lib/format';
+import { formatDate, timeAgo } from '../../lib/format';
+import { useToast } from '../../lib/ToastContext';
 
 export default function ClientsList() {
   const [params, setParams] = useSearchParams();
+  const view = params.get('view') === 'contacts' ? 'contacts' : 'entreprises';
+
+  const setView = (v) => {
+    const next = new URLSearchParams(params);
+    if (v === 'entreprises') next.delete('view'); else next.set('view', v);
+    next.delete('page');
+    setParams(next);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-heading font-semibold text-slate2-900">Clients</h1>
+          <p className="text-slate2-500 text-sm mt-1">Entreprises, contacts et relation commerciale Neogia</p>
+        </div>
+      </div>
+
+      <div className="inline-flex items-center gap-1 bg-slate2-100 rounded-xl p-1">
+        <button
+          className={`px-3.5 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors ${view === 'entreprises' ? 'bg-white shadow-card text-slate2-900' : 'text-slate2-500 hover:text-slate2-700'}`}
+          onClick={() => setView('entreprises')}
+        >
+          <Building2 size={14} /> Entreprises
+        </button>
+        <button
+          className={`px-3.5 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors ${view === 'contacts' ? 'bg-white shadow-card text-slate2-900' : 'text-slate2-500 hover:text-slate2-700'}`}
+          onClick={() => setView('contacts')}
+        >
+          <Users size={14} /> Tous les contacts
+        </button>
+      </div>
+
+      {view === 'entreprises' ? <EntreprisesView /> : <ContactsView />}
+    </div>
+  );
+}
+
+// ============================================================================
+// Vue "Entreprises" — une ligne par entreprise, jamais de doublon.
+// ============================================================================
+function EntreprisesView() {
+  const [params, setParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const filters = {
+    search: params.get('search') || '',
+    tech: params.get('tech') || '',
+    statut: params.get('statut') || '',
+    page: parseInt(params.get('page') || '1', 10),
+  };
+
+  const load = () => {
+    setLoading(true);
+    setError(null);
+    api.get(`/entreprises${qs({ ...filters, pageSize: 24 })}`)
+      .then((d) => { setData(d); setLoading(false); })
+      .catch((e) => { setError(e.message || 'Le chargement des entreprises a échoué.'); setLoading(false); });
+  };
+  useEffect(() => { load(); }, [params]);
+
+  const updateParam = (patch) => {
+    const next = new URLSearchParams(params);
+    Object.entries(patch).forEach(([k, v]) => (v ? next.set(k, v) : next.delete(k)));
+    if (!('page' in patch)) next.delete('page');
+    setParams(next);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="card p-4">
+        <div className="flex gap-3 items-center flex-wrap">
+          <input
+            className="input flex-1 min-w-[240px]"
+            placeholder="Rechercher une entreprise..."
+            defaultValue={filters.search}
+            onChange={(e) => updateParam({ search: e.target.value })}
+          />
+          <input
+            className="input min-w-[220px]"
+            placeholder="Filtrer par technologie (ex: Databricks)"
+            defaultValue={filters.tech}
+            onChange={(e) => updateParam({ tech: e.target.value })}
+          />
+          {(filters.search || filters.tech || filters.statut) && (
+            <button className="btn btn-ghost text-red-500" onClick={() => setParams({})}>
+              <X size={14} /> Réinitialiser
+            </button>
+          )}
+        </div>
+        {filters.tech && (
+          <div className="mt-3">
+            <span className="inline-flex items-center gap-1.5 text-sm bg-brand-50 text-brand font-medium px-3 py-1.5 rounded-full">
+              Technologie : {filters.tech}
+              <button onClick={() => updateParam({ tech: '' })} className="hover:bg-brand/10 rounded-full p-0.5 -mr-1" title="Retirer ce filtre">
+                <X size={13} />
+              </button>
+            </span>
+          </div>
+        )}
+      </div>
+
+      {loading && <Loading />}
+      {!loading && error && <EmptyState title="Impossible de charger les entreprises" description={error} />}
+      {!loading && !error && data && data.results.length === 0 && (
+        <EmptyState title="Aucune entreprise trouvée" description="Essayez d'ajuster votre recherche ou vos filtres." />
+      )}
+
+      {!loading && !error && data && data.results.length > 0 && (
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {data.results.map((e) => (
+            <Link
+              key={e.id}
+              to={`/clients/entreprise/${e.id}`}
+              className="card p-5 hover:shadow-card-hover hover:-translate-y-0.5 transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <EntrepriseLogo nom={e.nom} logoUrl={e.logo_url} size={44} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-slate2-800 truncate">{e.nom}</p>
+                  <EntrepriseStatusBadge statut={e.statut} small />
+                </div>
+              </div>
+              <div className="flex items-center gap-4 mt-3.5 text-xs text-slate2-500">
+                <span>{e.contacts_count} contact{e.contacts_count > 1 ? 's' : ''}</span>
+                <span>{e.besoins_ouverts_count} besoin{e.besoins_ouverts_count > 1 ? 's' : ''} ouvert{e.besoins_ouverts_count > 1 ? 's' : ''}</span>
+              </div>
+              <div className="flex flex-wrap gap-1 mt-3 min-h-[22px]">
+                {(e.technologies || []).slice(0, 4).map((t) => <TechTag key={t.id} tech={t} size="sm" />)}
+                {e.technologies_count > 4 && <span className="text-xs text-slate2-400">+{e.technologies_count - 4}</span>}
+              </div>
+              <div className="text-xs text-slate2-400 mt-3 pt-3 border-t border-slate2-100">
+                Dernier échange : {e.dernier_echange_at ? timeAgo(e.dernier_echange_at) : 'aucun'}
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+      {!loading && !error && data && <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onChange={(p) => updateParam({ page: p })} />}
+    </div>
+  );
+}
+
+// ============================================================================
+// Vue "Tous les contacts" — l'ancienne liste plate de contacts, avec pagination
+// et filtres 100% côté serveur.
+// ============================================================================
+function ContactsView() {
+  const [params, setParams] = useSearchParams();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
   const [modalOpen, setModalOpen] = useState(params.get('create') === '1');
   const [editing, setEditing] = useState(null);
   const { getOptions } = usePickLists();
+  const toast = useToast();
 
   const filters = {
     search: params.get('search') || '',
@@ -32,7 +187,10 @@ export default function ClientsList() {
 
   const load = () => {
     setLoading(true);
-    api.get(`/contacts${qs({ ...filters, pageSize: 25 })}`).then((d) => { setData(d); setLoading(false); });
+    setError(null);
+    api.get(`/contacts${qs({ ...filters, pageSize: 25 })}`)
+      .then((d) => { setData(d); setLoading(false); })
+      .catch((e) => { setError(e.message || 'Le chargement des contacts a échoué.'); setLoading(false); });
   };
 
   useEffect(() => { load(); }, [params]);
@@ -51,16 +209,12 @@ export default function ClientsList() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-heading font-semibold text-slate2-900">Clients</h1>
-          <p className="text-slate2-500 text-sm mt-1">{data ? `${data.total} contact(s)` : '...'}</p>
-        </div>
-        <div className="flex gap-2">
-          <a href={`/api/export/contacts.xlsx`} className="btn btn-secondary"><Download size={16} /> Exporter</a>
-          <button className="btn btn-primary" onClick={() => { setEditing(null); setModalOpen(true); }}><Plus size={16} /> Nouveau contact</button>
-        </div>
+      <div className="flex justify-end gap-2 -mt-2">
+        <button className="btn btn-secondary" onClick={() => downloadFile('/export/contacts.xlsx', 'contacts.xlsx').catch((e) => toast(e.message, 'error'))}><Download size={16} /> Exporter</button>
+        <button className="btn btn-primary" onClick={() => { setEditing(null); setModalOpen(true); }}><Plus size={16} /> Nouveau contact</button>
       </div>
+
+      <p className="text-slate2-500 text-sm -mt-3">{data ? `${data.total} contact(s)` : '...'}</p>
 
       <div className="card p-4">
         <div className="flex gap-3 items-center flex-wrap">
@@ -74,11 +228,22 @@ export default function ClientsList() {
             <Filter size={16} /> Filtres
           </button>
           {(filters.statut || filters.fonction || filters.tech || filters.incomplete) && (
-            <button className="btn btn-ghost text-red-500" onClick={() => setParams({})}>
+            <button className="btn btn-ghost text-red-500" onClick={() => setParams({ view: 'contacts' })}>
               <X size={14} /> Réinitialiser
             </button>
           )}
         </div>
+
+        {filters.tech && (
+          <div className="mt-3">
+            <span className="inline-flex items-center gap-1.5 text-sm bg-brand-50 text-brand font-medium px-3 py-1.5 rounded-full">
+              Technologie : {filters.tech}
+              <button onClick={() => updateParam({ tech: '' })} className="hover:bg-brand/10 rounded-full p-0.5 -mr-1" title="Retirer ce filtre">
+                <X size={13} />
+              </button>
+            </span>
+          </div>
+        )}
 
         {showFilters && (
           <div className="grid md:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate2-100">
@@ -109,11 +274,12 @@ export default function ClientsList() {
       </div>
 
       {loading && <Loading />}
-      {!loading && data && data.results.length === 0 && (
+      {!loading && error && <EmptyState title="Impossible de charger les contacts" description={error} />}
+      {!loading && !error && data && data.results.length === 0 && (
         <EmptyState title="Aucun contact trouvé" description="Essayez d'ajuster votre recherche ou vos filtres." />
       )}
 
-      {!loading && data && data.results.length > 0 && (
+      {!loading && !error && data && data.results.length > 0 && (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

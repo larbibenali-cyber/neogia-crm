@@ -30,9 +30,14 @@ export default function ContactDetail() {
   const toast = useToast();
   const confirm = useConfirm();
 
-  const load = () => api.get(`/contacts/${id}`).then(setContact);
+  const [error, setError] = useState(null);
+  const load = () => {
+    setError(null);
+    return api.get(`/contacts/${id}`).then(setContact).catch((e) => setError(e.message || 'Impossible de charger ce contact.'));
+  };
   useEffect(() => { load(); }, [id]);
 
+  if (error) return <EmptyState title="Impossible de charger le contact" description={error} />;
   if (!contact) return <Loading />;
 
   const archive = async () => {
