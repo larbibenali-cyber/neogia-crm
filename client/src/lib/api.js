@@ -47,10 +47,10 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  get: (path) => request(path),
-  post: (path, body) => request(path, { method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body) }),
-  put: (path, body) => request(path, { method: 'PUT', body: JSON.stringify(body) }),
-  del: (path) => request(path, { method: 'DELETE' }),
+  get: (path, options) => request(path, options),
+  post: (path, body, options) => request(path, { method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body), ...options }),
+  put: (path, body, options) => request(path, { method: 'PUT', body: JSON.stringify(body), ...options }),
+  del: (path, options) => request(path, { method: 'DELETE', ...options }),
 };
 
 // Déclenche le téléchargement d'un fichier depuis une route API protégée
