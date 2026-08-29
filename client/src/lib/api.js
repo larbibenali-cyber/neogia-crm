@@ -10,6 +10,7 @@ async function authHeader() {
 
 async function request(path, options = {}) {
   const auth = await authHeader();
+  const hadToken = Boolean(auth.Authorization);
   const res = await fetch(`${BASE}${path}`, {
     headers: {
       ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
@@ -18,10 +19,16 @@ async function request(path, options = {}) {
     ...options,
   });
   if (res.status === 401) {
-    // Session expirée ou invalide : on force une reconnexion plutôt que de laisser
-    // l'utilisateur face à des données partielles ou des erreurs silencieuses.
-    await supabase.auth.signOut();
-    window.location.href = '/login';
+    // On ne force une reconnexion (déconnexion + retour à /login) que si on avait
+    // réellement un jeton qui a été rejeté (session expirée). Si l'appel a été fait
+    // sans jeton (utilisateur pas encore connecté, ex. sur /login), on se contente de
+    // signaler l'erreur sans recharger la page : sinon un appel API déclenché en
+    // arrière-plan avant la connexion (ex. chargement des listes de statuts) provoque
+    // une boucle de rechargement infinie.
+    if (hadToken && window.location.pathname !== '/login') {
+      await supabase.auth.signOut();
+      window.location.href = '/login';
+    }
     throw new Error('Session expirée, merci de vous reconnecter.');
   }
   if (!res.ok) {
