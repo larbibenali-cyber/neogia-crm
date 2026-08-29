@@ -1,0 +1,7 @@
+# Copiez ce fichier en .env (ou définissez ces variables dans les réglages
+# "build" de l'hébergeur) avant de lancer `npm run build`.
+# Ces deux valeurs sont volontairement publiques : la clé "anon" Supabase est
+# conçue pour être visible dans le navigateur et ne donne accès à aucune
+# donnée sans une session utilisateur valide (RLS + vérification serveur).
+VITE_SUPABASE_URL=https://xxxtyslrtaiamiriijqz.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_iyfE_-bHRQGDAR-BnUQaOA_z6rpoboP

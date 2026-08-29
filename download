@@ -1,0 +1,15 @@
+node_modules/
+*.log
+.DS_Store
+.env
+.env.local
+client/.env
+
+# Ancienne base SQLite locale et fichiers d'upload (obsolètes : la persistance
+# se fait désormais sur Supabase — Postgres + Storage). Ne jamais committer de
+# données réelles de clients/candidats dans le dépôt.
+data/
+uploads/
+
+# Frontend compilé : reconstruit à chaque déploiement (voir "build" dans package.json).
+/public/
