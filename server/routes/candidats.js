@@ -6,6 +6,16 @@ const { uploadCv, downloadCv, deleteCv } = require('../storage');
 
 const router = express.Router();
 
+// Un champ numérique laissé vide arrive du formulaire comme '' (chaîne vide), pas
+// comme undefined/null : SQLite l'acceptait silencieusement, mais Postgres rejette
+// '' pour une colonne numeric/real ("invalid input syntax for type real"). On
+// normalise donc systématiquement en null avant toute requête.
+function numOrNull(v) {
+  if (v === '' || v === undefined || v === null) return null;
+  const n = Number(v);
+  return Number.isNaN(n) ? null : n;
+}
+
 // Le fichier transite en mémoire uniquement le temps de la requête, puis part
 // directement vers le bucket privé Supabase Storage — jamais écrit sur disque.
 const upload = multer({
@@ -112,10 +122,10 @@ router.post('/', async (req, res, next) => {
     `, {
       prenom: b.prenom || '', nom: b.nom || '', email: b.email || '', email_normalise: email,
       telephone: b.telephone || '', intitule_profil: b.intitule_profil || '', metier: b.metier || '',
-      annees_experience: b.annees_experience ?? null, competences_principales: b.competences_principales || '',
+      annees_experience: numOrNull(b.annees_experience), competences_principales: b.competences_principales || '',
       secteurs: b.secteurs || '', localisation: b.localisation || '', mobilite: b.mobilite || '',
       disponibilite: b.disponibilite || '', disponibilite_date: b.disponibilite_date || null,
-      tjm: b.tjm ?? null, niveau_anglais: b.niveau_anglais || '', statut: b.statut || 'a_contacter',
+      tjm: numOrNull(b.tjm), niveau_anglais: b.niveau_anglais || '', statut: b.statut || 'a_contacter',
       source: b.source || 'Saisie manuelle', notes: b.notes || '', incomplete,
     });
     if (b.technologies) await setTechnologies(row.id, toTagsArray(b.technologies));
@@ -141,11 +151,13 @@ router.put('/:id', async (req, res, next) => {
       id: req.params.id,
       prenom: b.prenom ?? existing.prenom, nom: b.nom ?? existing.nom, email: b.email ?? existing.email, email_normalise: email,
       telephone: b.telephone ?? existing.telephone, intitule_profil: b.intitule_profil ?? existing.intitule_profil,
-      metier: b.metier ?? existing.metier, annees_experience: b.annees_experience ?? existing.annees_experience,
+      metier: b.metier ?? existing.metier,
+      annees_experience: b.annees_experience !== undefined ? numOrNull(b.annees_experience) : existing.annees_experience,
       competences_principales: b.competences_principales ?? existing.competences_principales, secteurs: b.secteurs ?? existing.secteurs,
       localisation: b.localisation ?? existing.localisation, mobilite: b.mobilite ?? existing.mobilite,
-      disponibilite: b.disponibilite ?? existing.disponibilite, disponibilite_date: b.disponibilite_date ?? existing.disponibilite_date,
-      tjm: b.tjm ?? existing.tjm, niveau_anglais: b.niveau_anglais ?? existing.niveau_anglais,
+      disponibilite: b.disponibilite ?? existing.disponibilite,
+      disponibilite_date: b.disponibilite_date !== undefined ? (b.disponibilite_date || null) : existing.disponibilite_date,
+      tjm: b.tjm !== undefined ? numOrNull(b.tjm) : existing.tjm, niveau_anglais: b.niveau_anglais ?? existing.niveau_anglais,
       statut: b.statut ?? existing.statut, source: b.source ?? existing.source, notes: b.notes ?? existing.notes,
     });
     if (b.technologies) await setTechnologies(req.params.id, toTagsArray(b.technologies));

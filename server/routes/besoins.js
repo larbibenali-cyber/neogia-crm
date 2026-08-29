@@ -1,6 +1,6 @@
 const express = require('express');
 const { dbGet, dbAll, dbRun } = require('../../db/pg');
-const { paginate, generateReference, toTagsArray } = require('../utils');
+const { paginate, generateReference, toTagsArray, computeSyntheseStatut } = require('../utils');
 const { computeMatchScore } = require('../matching');
 
 const router = express.Router();
@@ -41,29 +41,42 @@ async function setTechnologies(besoinId, obligatoires, appreciees) {
 
 router.get('/', async (req, res, next) => {
   try {
-    const { search, statut, entreprise_id, priorite, tech, date_limite_before, archived } = req.query;
+    const { search, statut, groupe, statut_synthese, entreprise_id, priorite, tech, date_limite_before, archived } = req.query;
     const { page, pageSize, offset } = paginate(req.query);
     const where = [`b.archived = @archived`];
     const params = { archived: archived === 'true' };
     if (search) { where.push(`(b.titre ILIKE @s OR b.reference ILIKE @s OR b.description_contexte ILIKE @s)`); params.s = `%${search}%`; }
     if (statut) { where.push(`b.statut = @statut`); params.statut = statut; }
+    // `groupe`/`statut_synthese` : filtre sur le statut normalisé affiché dans le
+    // widget "Besoins par statut" du tableau de bord (À venir / En cours / Perdu / ...).
+    // Valeur spéciale "ouverts" = À venir + En cours (utilisée par le compteur
+    // "Besoins ouverts" du tableau de bord).
+    const groupeFilter = groupe || statut_synthese;
+    if (groupeFilter === 'ouverts') {
+      where.push(`b.statut_synthese IN ('À venir', 'En cours')`);
+    } else if (groupeFilter) {
+      where.push(`b.statut_synthese = @groupe`); params.groupe = groupeFilter;
+    }
     if (entreprise_id) { where.push(`b.entreprise_id = @eid`); params.eid = entreprise_id; }
     if (priorite) { where.push(`b.priorite = @priorite`); params.priorite = priorite; }
     if (date_limite_before) { where.push(`b.date_limite_reponse <= @dlb`); params.dlb = date_limite_before; }
-
-    let rows = await dbAll(`SELECT b.* FROM besoins b WHERE ${where.join(' AND ')} ORDER BY b.created_at DESC`, params);
     if (tech) {
       const techNames = String(tech).split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
-      const filtered = [];
-      for (const b of rows) {
-        const names = (await dbAll(`SELECT t.nom FROM besoin_technologies bt JOIN technologies t ON t.id=bt.technology_id WHERE bt.besoin_id=?`, [b.id]))
-          .map((r) => r.nom.toLowerCase());
-        if (techNames.some((t) => names.includes(t))) filtered.push(b);
+      if (techNames.length) {
+        where.push(`EXISTS (
+          SELECT 1 FROM besoin_technologies bt JOIN technologies t ON t.id = bt.technology_id
+          WHERE bt.besoin_id = b.id AND lower(t.nom) = ANY(@techNames::text[])
+        )`);
+        params.techNames = techNames;
       }
-      rows = filtered;
     }
-    const total = rows.length;
-    const pageSlice = rows.slice(offset, offset + pageSize);
+
+    const whereSql = where.join(' AND ');
+    const total = (await dbGet(`SELECT COUNT(*)::int AS total FROM besoins b WHERE ${whereSql}`, params)).total;
+    const pageSlice = await dbAll(`
+      SELECT b.* FROM besoins b WHERE ${whereSql} ORDER BY b.created_at DESC LIMIT @limit OFFSET @offset
+    `, { ...params, limit: pageSize, offset });
+
     const page_rows = [];
     for (const b of pageSlice) page_rows.push(await attachExtras(b));
     res.json({ total, page, pageSize, results: page_rows });
@@ -88,17 +101,18 @@ router.post('/', async (req, res, next) => {
     const tjm_candidat = b.tjm_candidat !== undefined && b.tjm_candidat !== '' ? Number(b.tjm_candidat) : null;
     const marge = (tjm_client !== null && tjm_candidat !== null) ? tjm_client - tjm_candidat : null;
 
+    const statutInitial = b.statut || 'lead_a_qualifier';
     const row = await dbGet(`
       INSERT INTO besoins (
         reference, titre, entreprise_id, contact_id, description_contexte, missions, competences_obligatoires,
         competences_appreciees, niveau_experience, localisation, teletravail, date_demarrage, duree_estimee,
         tjm_client, tjm_candidat, marge_estimee, priorite, date_limite_reponse, source, notes_internes, statut,
-        echange_origine_id, created_at, updated_at
+        statut_source, statut_synthese, echange_origine_id, created_at, updated_at
       ) VALUES (
         @reference, @titre, @entreprise_id, @contact_id, @description_contexte, @missions, @competences_obligatoires,
         @competences_appreciees, @niveau_experience, @localisation, @teletravail, @date_demarrage, @duree_estimee,
         @tjm_client, @tjm_candidat, @marge_estimee, @priorite, @date_limite_reponse, @source, @notes_internes, @statut,
-        @echange_origine_id, now(), now()
+        @statut_source, @statut_synthese, @echange_origine_id, now(), now()
       ) RETURNING id
     `, {
       reference, titre: b.titre, entreprise_id: b.entreprise_id, contact_id: b.contact_id || null,
@@ -108,7 +122,9 @@ router.post('/', async (req, res, next) => {
       date_demarrage: b.date_demarrage || null, duree_estimee: b.duree_estimee || '',
       tjm_client, tjm_candidat, marge_estimee: marge, priorite: b.priorite || 'normale',
       date_limite_reponse: b.date_limite_reponse || null, source: b.source || 'Module Besoins',
-      notes_internes: b.notes_internes || '', statut: b.statut || 'lead_a_qualifier',
+      notes_internes: b.notes_internes || '', statut: statutInitial,
+      statut_source: b.statut_source || null,
+      statut_synthese: computeSyntheseStatut(statutInitial, b.statut_source || null),
       echange_origine_id: b.echange_origine_id || null,
     });
     if (b.technologies_obligatoires || b.technologies_appreciees) {
@@ -127,13 +143,16 @@ router.put('/:id', async (req, res, next) => {
     const tjm_candidat = b.tjm_candidat !== undefined ? (b.tjm_candidat === '' ? null : Number(b.tjm_candidat)) : existing.tjm_candidat;
     const marge = (tjm_client !== null && tjm_candidat !== null) ? tjm_client - tjm_candidat : null;
 
+    const statutFinal = b.statut ?? existing.statut;
+    const statutSourceFinal = b.statut_source ?? existing.statut_source;
     await dbRun(`
       UPDATE besoins SET titre=@titre, contact_id=@contact_id, description_contexte=@description_contexte, missions=@missions,
         competences_obligatoires=@competences_obligatoires, competences_appreciees=@competences_appreciees,
         niveau_experience=@niveau_experience, localisation=@localisation, teletravail=@teletravail,
         date_demarrage=@date_demarrage, duree_estimee=@duree_estimee, tjm_client=@tjm_client, tjm_candidat=@tjm_candidat,
         marge_estimee=@marge_estimee, priorite=@priorite, date_limite_reponse=@date_limite_reponse, source=@source,
-        notes_internes=@notes_internes, statut=@statut, updated_at=now()
+        notes_internes=@notes_internes, statut=@statut, statut_source=@statut_source, statut_synthese=@statut_synthese,
+        updated_at=now()
       WHERE id=@id
     `, {
       id: req.params.id,
@@ -146,7 +165,8 @@ router.put('/:id', async (req, res, next) => {
       duree_estimee: b.duree_estimee ?? existing.duree_estimee, tjm_client, tjm_candidat, marge_estimee: marge,
       priorite: b.priorite ?? existing.priorite, date_limite_reponse: b.date_limite_reponse ?? existing.date_limite_reponse,
       source: b.source ?? existing.source, notes_internes: b.notes_internes ?? existing.notes_internes,
-      statut: b.statut ?? existing.statut,
+      statut: statutFinal, statut_source: statutSourceFinal,
+      statut_synthese: b.statut_synthese || computeSyntheseStatut(statutFinal, statutSourceFinal),
     });
     if (b.technologies_obligatoires || b.technologies_appreciees) {
       await setTechnologies(req.params.id, toTagsArray(b.technologies_obligatoires), toTagsArray(b.technologies_appreciees));
@@ -163,7 +183,7 @@ router.delete('/:id', async (req, res, next) => {
       await dbRun('DELETE FROM besoins WHERE id = ?', [req.params.id]);
       return res.json({ deleted: true });
     }
-    await dbRun(`UPDATE besoins SET archived = true, statut='cloture', updated_at = now() WHERE id = ?`, [req.params.id]);
+    await dbRun(`UPDATE besoins SET archived = true, statut='cloture', statut_synthese='Clôturé', updated_at = now() WHERE id = ?`, [req.params.id]);
     res.json({ archived: true });
   } catch (err) { next(err); }
 });

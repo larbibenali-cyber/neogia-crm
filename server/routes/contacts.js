@@ -4,11 +4,6 @@ const { paginate, toTagsArray, parseJsonSafe } = require('../utils');
 
 const router = express.Router();
 
-async function techIdsForEntreprise(entrepriseId) {
-  const rows = await dbAll(`SELECT technology_id FROM entreprise_technologies WHERE entreprise_id = ?`, [entrepriseId]);
-  return rows.map((r) => r.technology_id);
-}
-
 async function attachExtras(contact) {
   if (!contact) return contact;
   contact.tags = parseJsonSafe(contact.tags, []);
@@ -54,7 +49,8 @@ router.get('/check-duplicate', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ---- Liste + recherche + filtres combinés ----
+// ---- Liste + recherche + filtres combinés (pagination et filtres 100% côté SQL :
+//      aucune requête ne charge l'ensemble des ~2300 contacts en mémoire) ----
 router.get('/', async (req, res, next) => {
   try {
     const { search, entreprise_id, statut, fonction, responsable, tech, tech_mode, tech_exclude,
@@ -82,50 +78,77 @@ router.get('/', async (req, res, next) => {
     if (last_exchange_before) { where.push(`c.dernier_echange_at <= @leb`); params.leb = last_exchange_before; }
     if (last_exchange_after) { where.push(`c.dernier_echange_at >= @lea`); params.lea = last_exchange_after; }
 
-    const sql = `
-      SELECT c.*, ent.nom as entreprise_nom
-      FROM contacts c JOIN entreprises ent ON ent.id = c.entreprise_id
-      WHERE ${where.join(' AND ')}
-    `;
-
-    let rows = await dbAll(sql, params);
-
+    // Filtre technologie : porté par l'environnement technique de l'ENTREPRISE du contact
+    // (entreprise_technologies), résolu en une seule sous-requête SQL — plus de boucle
+    // par ligne (c'était la cause du blocage "Chargement" lors d'une recherche par techno).
     if (tech) {
       const techNames = String(tech).split(',').map((t) => t.trim()).filter(Boolean);
-      const excludeNames = tech_exclude ? String(tech_exclude).split(',').map((t) => t.trim()).filter(Boolean) : [];
       const mode = tech_mode === 'all' ? 'all' : 'any';
-      const filtered = [];
-      for (const c of rows) {
-        const ids = await techIdsForEntreprise(c.entreprise_id);
-        const names = ids.length
-          ? (await dbAll(`SELECT nom FROM technologies WHERE id = ANY(?::bigint[])`, [ids])).map((r) => r.nom.toLowerCase())
-          : [];
-        const wantHit = mode === 'all'
-          ? techNames.every((t) => names.includes(t.toLowerCase()))
-          : techNames.some((t) => names.includes(t.toLowerCase()));
-        const excludeHit = excludeNames.some((t) => names.includes(t.toLowerCase()));
-        if (wantHit && !excludeHit) filtered.push(c);
+      if (techNames.length) {
+        if (mode === 'all') {
+          where.push(`(
+            SELECT COUNT(DISTINCT t.id) FROM entreprise_technologies et JOIN technologies t ON t.id = et.technology_id
+            WHERE et.entreprise_id = c.entreprise_id AND lower(t.nom) = ANY(@techNames::text[])
+          ) = @techCount`);
+          params.techNames = techNames.map((t) => t.toLowerCase());
+          params.techCount = techNames.length;
+        } else {
+          where.push(`EXISTS (
+            SELECT 1 FROM entreprise_technologies et JOIN technologies t ON t.id = et.technology_id
+            WHERE et.entreprise_id = c.entreprise_id AND lower(t.nom) = ANY(@techNames::text[])
+          )`);
+          params.techNames = techNames.map((t) => t.toLowerCase());
+        }
       }
-      rows = filtered;
+    }
+    if (tech_exclude) {
+      const excludeNames = String(tech_exclude).split(',').map((t) => t.trim()).filter(Boolean);
+      if (excludeNames.length) {
+        where.push(`NOT EXISTS (
+          SELECT 1 FROM entreprise_technologies et JOIN technologies t ON t.id = et.technology_id
+          WHERE et.entreprise_id = c.entreprise_id AND lower(t.nom) = ANY(@excludeNames::text[])
+        )`);
+        params.excludeNames = excludeNames.map((t) => t.toLowerCase());
+      }
     }
 
-    const total = rows.length;
+    const whereSql = where.join(' AND ');
+    const total = (await dbGet(`
+      SELECT COUNT(*)::int AS total FROM contacts c JOIN entreprises ent ON ent.id = c.entreprise_id
+      WHERE ${whereSql}
+    `, params)).total;
+
     const sortCol = ['nom', 'prenom', 'entreprise_nom', 'statut', 'dernier_echange_at', 'created_at'].includes(sort) ? sort : 'nom';
-    const dir = sortDir === 'desc' ? -1 : 1;
-    rows.sort((a, b) => {
-      const av = (a[sortCol] || '').toString();
-      const bv = (b[sortCol] || '').toString();
-      return av.localeCompare(bv) * dir;
-    });
-    const pageSlice = rows.slice(offset, offset + pageSize);
-    const page_rows = [];
-    for (const c of pageSlice) {
-      const technologies = await dbAll(`
-        SELECT t.id, t.nom, t.categorie, et.weight FROM entreprise_technologies et JOIN technologies t ON t.id = et.technology_id
-        WHERE et.entreprise_id = ? ORDER BY et.weight DESC
-      `, [c.entreprise_id]);
-      page_rows.push({ ...c, tags: parseJsonSafe(c.tags, []), technologies });
+    const sortExpr = sortCol === 'entreprise_nom' ? 'ent.nom' : `c.${sortCol}`;
+    const dir = sortDir === 'desc' ? 'DESC' : 'ASC';
+
+    const pageParams = { ...params, limit: pageSize, offset };
+    const pageSlice = await dbAll(`
+      SELECT c.*, ent.nom as entreprise_nom
+      FROM contacts c JOIN entreprises ent ON ent.id = c.entreprise_id
+      WHERE ${whereSql}
+      ORDER BY ${sortExpr} ${dir} NULLS LAST, c.id ASC
+      LIMIT @limit OFFSET @offset
+    `, pageParams);
+
+    // Technologies de la page courante : une seule requête groupée (pas une par ligne).
+    const entIds = [...new Set(pageSlice.map((c) => c.entreprise_id).filter(Boolean))];
+    const techRows = entIds.length ? await dbAll(`
+      SELECT et.entreprise_id, t.id, t.nom, t.categorie, et.weight
+      FROM entreprise_technologies et JOIN technologies t ON t.id = et.technology_id
+      WHERE et.entreprise_id = ANY(?::bigint[])
+      ORDER BY et.weight DESC
+    `, [entIds]) : [];
+    const techByEnt = {};
+    for (const r of techRows) {
+      (techByEnt[r.entreprise_id] = techByEnt[r.entreprise_id] || []).push({ id: r.id, nom: r.nom, categorie: r.categorie, weight: r.weight });
     }
+
+    const page_rows = pageSlice.map((c) => ({
+      ...c,
+      tags: parseJsonSafe(c.tags, []),
+      technologies: techByEnt[c.entreprise_id] || [],
+    }));
 
     res.json({ total, page, pageSize, results: page_rows });
   } catch (err) { next(err); }
