@@ -172,7 +172,12 @@ router.put('/:id', async (req, res, next) => {
       priorite: b.priorite ?? existing.priorite, date_limite_reponse: b.date_limite_reponse ?? existing.date_limite_reponse,
       source: b.source ?? existing.source, notes_internes: b.notes_internes ?? existing.notes_internes,
       statut: statutFinal, statut_source: statutSourceFinal,
-      statut_synthese: b.statut_synthese || computeSyntheseStatut(statutFinal, statutSourceFinal),
+      // Toujours recalculé à partir du statut final : ne jamais faire confiance à un
+      // `statut_synthese` renvoyé par le client (le formulaire de modification renvoie
+      // l'objet besoin tel que chargé initialement, avec l'ancienne valeur de synthèse,
+      // ce qui empêchait le tableau de bord et les compteurs de se mettre à jour après
+      // un changement de statut).
+      statut_synthese: computeSyntheseStatut(statutFinal, statutSourceFinal),
     });
     if (b.technologies_obligatoires || b.technologies_appreciees) {
       await setTechnologies(req.params.id, toTagsArray(b.technologies_obligatoires), toTagsArray(b.technologies_appreciees));
