@@ -27,9 +27,14 @@ export default function CandidatDetail() {
   const toast = useToast();
   const confirm = useConfirm();
 
-  const load = () => api.get(`/candidats/${id}`).then(setCandidat);
+  const [error, setError] = useState(null);
+  const load = () => {
+    setError(null);
+    return api.get(`/candidats/${id}`).then(setCandidat).catch((e) => setError(e.message || 'Impossible de charger ce candidat.'));
+  };
   useEffect(() => { load(); }, [id]);
 
+  if (error) return <EmptyState title="Impossible de charger le candidat" description={error} />;
   if (!candidat) return <Loading />;
 
   const archive = async () => {

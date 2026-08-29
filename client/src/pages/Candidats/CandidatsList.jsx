@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Filter, Download, X, MapPin } from 'lucide-react';
-import { api, qs } from '../../lib/api';
+import { api, qs, downloadFile } from '../../lib/api';
 import { Loading, Pagination, EmptyState, Avatar } from '../../components/ui';
 import StatusBadge from '../../components/StatusBadge';
 import { TechTag } from '../../components/TechCloud';
 import CandidatFormModal from '../../components/CandidatFormModal';
 import { usePickLists } from '../../lib/PickListsContext';
+import { useToast } from '../../lib/ToastContext';
 
 export default function CandidatsList() {
   const [params, setParams] = useSearchParams();
@@ -15,6 +16,7 @@ export default function CandidatsList() {
   const [showFilters, setShowFilters] = useState(false);
   const [modalOpen, setModalOpen] = useState(params.get('create') === '1');
   const { getOptions } = usePickLists();
+  const toast = useToast();
 
   const filters = {
     search: params.get('search') || '',
@@ -26,9 +28,13 @@ export default function CandidatsList() {
     page: parseInt(params.get('page') || '1', 10),
   };
 
+  const [error, setError] = useState(null);
   const load = () => {
     setLoading(true);
-    api.get(`/candidats${qs({ ...filters, pageSize: 24 })}`).then((d) => { setData(d); setLoading(false); });
+    setError(null);
+    api.get(`/candidats${qs({ ...filters, pageSize: 24 })}`)
+      .then((d) => { setData(d); setLoading(false); })
+      .catch((e) => { setError(e.message || 'Le chargement des candidats a échoué.'); setLoading(false); });
   };
   useEffect(() => { load(); }, [params]);
 
@@ -47,7 +53,7 @@ export default function CandidatsList() {
           <p className="text-slate2-500 text-sm mt-1">{data ? `${data.total} candidat(s)` : '...'}</p>
         </div>
         <div className="flex gap-2">
-          <a href="/api/export/candidats.xlsx" className="btn btn-secondary"><Download size={16} /> Exporter</a>
+          <button className="btn btn-secondary" onClick={() => downloadFile('/export/candidats.xlsx', 'candidats.xlsx').catch((e) => toast(e.message, 'error'))}><Download size={16} /> Exporter</button>
           <button className="btn btn-primary" onClick={() => setModalOpen(true)}><Plus size={16} /> Nouveau candidat</button>
         </div>
       </div>
@@ -79,9 +85,10 @@ export default function CandidatsList() {
       </div>
 
       {loading && <Loading />}
-      {!loading && data && data.results.length === 0 && <EmptyState title="Aucun candidat trouvé" description="Ajoutez votre premier candidat pour commencer." />}
+      {!loading && error && <EmptyState title="Impossible de charger les candidats" description={error} />}
+      {!loading && !error && data && data.results.length === 0 && <EmptyState title="Aucun candidat trouvé" description="Ajoutez votre premier candidat pour commencer." />}
 
-      {!loading && data && data.results.length > 0 && (
+      {!loading && !error && data && data.results.length > 0 && (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {data.results.map((c) => (
             <Link key={c.id} to={`/candidats/${c.id}`} className="card p-5 hover:shadow-card-hover transition-shadow">
@@ -108,7 +115,7 @@ export default function CandidatsList() {
           ))}
         </div>
       )}
-      {!loading && data && <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onChange={(p) => updateParam({ page: p })} />}
+      {!loading && !error && data && <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onChange={(p) => updateParam({ page: p })} />}
 
       <CandidatFormModal open={modalOpen} onClose={() => setModalOpen(false)} onSaved={load} />
     </div>
