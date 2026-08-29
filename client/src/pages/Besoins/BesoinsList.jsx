@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Filter, Download, X, Calendar, Building2 } from 'lucide-react';
-import { api, qs } from '../../lib/api';
+import { api, qs, downloadFile } from '../../lib/api';
 import { Loading, Pagination, EmptyState } from '../../components/ui';
 import StatusBadge from '../../components/StatusBadge';
 import BesoinFormModal from '../../components/BesoinFormModal';
 import { usePickLists } from '../../lib/PickListsContext';
 import { formatDate, formatMoney } from '../../lib/format';
+import { useToast } from '../../lib/ToastContext';
 
 export default function BesoinsList() {
   const [params, setParams] = useSearchParams();
@@ -15,18 +16,25 @@ export default function BesoinsList() {
   const [showFilters, setShowFilters] = useState(false);
   const [modalOpen, setModalOpen] = useState(params.get('create') === '1');
   const { getOptions } = usePickLists();
+  const toast = useToast();
+
+  const [error, setError] = useState(null);
 
   const filters = {
     search: params.get('search') || '',
     statut: params.get('statut') || '',
     priorite: params.get('priorite') || '',
     tech: params.get('tech') || '',
+    groupe: params.get('groupe') || '',
     page: parseInt(params.get('page') || '1', 10),
   };
 
   const load = () => {
     setLoading(true);
-    api.get(`/besoins${qs({ ...filters, pageSize: 20 })}`).then((d) => { setData(d); setLoading(false); });
+    setError(null);
+    api.get(`/besoins${qs({ ...filters, pageSize: 20 })}`)
+      .then((d) => { setData(d); setLoading(false); })
+      .catch((e) => { setError(e.message || 'Le chargement des besoins a échoué.'); setLoading(false); });
   };
   useEffect(() => { load(); }, [params]);
 
@@ -45,16 +53,31 @@ export default function BesoinsList() {
           <p className="text-slate2-500 text-sm mt-1">{data ? `${data.total} besoin(s)` : '...'}</p>
         </div>
         <div className="flex gap-2">
-          <a href="/api/export/besoins.xlsx" className="btn btn-secondary"><Download size={16} /> Exporter</a>
+          <button className="btn btn-secondary" onClick={() => downloadFile('/export/besoins.xlsx', 'besoins.xlsx').catch((e) => toast(e.message, 'error'))}><Download size={16} /> Exporter</button>
           <button className="btn btn-primary" onClick={() => setModalOpen(true)}><Plus size={16} /> Nouveau besoin</button>
         </div>
       </div>
+
+      {filters.groupe && (
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 text-sm bg-brand-50 text-brand font-medium px-3 py-1.5 rounded-full">
+            Statut : {filters.groupe === 'ouverts' ? 'Ouverts (À venir + En cours)' : filters.groupe}
+            <button
+              onClick={() => updateParam({ groupe: '' })}
+              className="hover:bg-brand/10 rounded-full p-0.5 -mr-1"
+              title="Retirer ce filtre"
+            >
+              <X size={13} />
+            </button>
+          </span>
+        </div>
+      )}
 
       <div className="card p-4">
         <div className="flex gap-3 items-center flex-wrap">
           <input className="input flex-1 min-w-[240px]" placeholder="Rechercher (titre, référence...)" defaultValue={filters.search} onChange={(e) => updateParam({ search: e.target.value })} />
           <button className={`btn ${showFilters ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setShowFilters((s) => !s)}><Filter size={16} /> Filtres</button>
-          {(filters.statut || filters.priorite || filters.tech) && <button className="btn btn-ghost text-red-500" onClick={() => setParams({})}><X size={14} /> Réinitialiser</button>}
+          {(filters.statut || filters.priorite || filters.tech || filters.groupe) && <button className="btn btn-ghost text-red-500" onClick={() => setParams({})}><X size={14} /> Réinitialiser</button>}
         </div>
         {showFilters && (
           <div className="grid md:grid-cols-3 gap-3 mt-4 pt-4 border-t border-slate2-100">
@@ -77,9 +100,12 @@ export default function BesoinsList() {
       </div>
 
       {loading && <Loading />}
-      {!loading && data && data.results.length === 0 && <EmptyState title="Aucun besoin trouvé" description="Créez votre premier besoin commercial." />}
+      {!loading && error && (
+        <EmptyState title="Impossible de charger les besoins" description={error} />
+      )}
+      {!loading && !error && data && data.results.length === 0 && <EmptyState title="Aucun besoin trouvé" description="Essayez d'ajuster votre recherche ou vos filtres." />}
 
-      {!loading && data && data.results.length > 0 && (
+      {!loading && !error && data && data.results.length > 0 && (
         <div className="space-y-2">
           {data.results.map((b) => (
             <Link key={b.id} to={`/besoins/${b.id}`} className="card p-4 flex items-center justify-between gap-4 hover:shadow-card-hover transition-shadow">
@@ -101,7 +127,7 @@ export default function BesoinsList() {
           ))}
         </div>
       )}
-      {!loading && data && <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onChange={(p) => updateParam({ page: p })} />}
+      {!loading && !error && data && <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onChange={(p) => updateParam({ page: p })} />}
 
       <BesoinFormModal open={modalOpen} onClose={() => setModalOpen(false)} onSaved={load} />
     </div>

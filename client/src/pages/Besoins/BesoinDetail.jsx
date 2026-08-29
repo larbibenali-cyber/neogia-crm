@@ -25,12 +25,17 @@ export default function BesoinDetail() {
   const toast = useToast();
   const confirm = useConfirm();
 
-  const load = () => api.get(`/besoins/${id}`).then(setBesoin);
+  const [error, setError] = useState(null);
+  const load = () => {
+    setError(null);
+    return api.get(`/besoins/${id}`).then(setBesoin).catch((e) => setError(e.message || 'Impossible de charger ce besoin.'));
+  };
   useEffect(() => { load(); }, [id]);
 
-  const loadSuggestions = () => api.get(`/besoins/${id}/suggestions`).then(setSuggestions);
+  const loadSuggestions = () => api.get(`/besoins/${id}/suggestions`).then(setSuggestions).catch(() => setSuggestions([]));
   useEffect(() => { if (tab === 'suggestions' && !suggestions) loadSuggestions(); }, [tab]);
 
+  if (error) return <EmptyState title="Impossible de charger le besoin" description={error} />;
   if (!besoin) return <Loading />;
 
   const archive = async () => {
