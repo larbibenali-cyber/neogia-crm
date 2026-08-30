@@ -85,7 +85,7 @@ export default function ContactDetail() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
             <StatusBadge category="contact_status" value={contact.statut} />
             <button className="btn btn-secondary" onClick={() => setEditOpen(true)}><Pencil size={14} /> Modifier</button>
             <button className="btn btn-danger" onClick={archive}><Archive size={14} /> Archiver</button>
