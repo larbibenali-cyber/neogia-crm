@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import Sidebar from './components/Sidebar';
+import MobileNav from './components/MobileNav';
 import GlobalSearch from './components/GlobalSearch';
 import Dashboard from './pages/Dashboard';
 import ClientsList from './pages/Clients/ClientsList';
@@ -39,13 +40,16 @@ function AppShell() {
     <div className="flex min-h-screen">
       <Sidebar />
       <div className="flex-1 min-w-0">
-        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate2-100 px-8 py-3 flex items-center justify-between gap-6">
+        <header
+          className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate2-100 px-4 md:px-8 py-3 flex items-center justify-between gap-3 md:gap-6"
+          style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }}
+        >
           <GlobalSearch />
-          <button onClick={signOut} className="btn btn-ghost shrink-0" title="Se déconnecter">
-            <LogOut size={15} /> Déconnexion
+          <button onClick={signOut} className="btn btn-ghost shrink-0 px-2 md:px-4" title="Se déconnecter">
+            <LogOut size={15} /> <span className="hidden md:inline">Déconnexion</span>
           </button>
         </header>
-        <main className="p-8 max-w-[1600px] mx-auto">
+        <main className="p-4 md:p-8 pb-24 md:pb-8 max-w-[1600px] mx-auto">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/clients" element={<ClientsList />} />
@@ -60,6 +64,7 @@ function AppShell() {
           </Routes>
         </main>
       </div>
+      <MobileNav />
     </div>
   );
 }
