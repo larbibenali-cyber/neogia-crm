@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Neogia CRM — Hors ligne</title>
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+        background: #4527EA;
+        color: #fff;
+      }
+      .wrap {
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 24px;
+        padding-top: calc(24px + env(safe-area-inset-top));
+        padding-bottom: calc(24px + env(safe-area-inset-bottom));
+        box-sizing: border-box;
+      }
+      .icon {
+        width: 64px;
+        height: 64px;
+        border-radius: 16px;
+        margin-bottom: 20px;
+      }
+      h1 { font-size: 1.15rem; margin: 0 0 8px; font-weight: 600; }
+      p { font-size: 0.9rem; opacity: 0.85; margin: 0 0 24px; max-width: 320px; line-height: 1.5; }
+      button {
+        background: #fff;
+        color: #4527EA;
+        border: none;
+        border-radius: 10px;
+        padding: 12px 28px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        min-height: 44px;
+        min-width: 44px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <img class="icon" src="/icons/icon-96.png" alt="Neogia" />
+      <h1>Pas de connexion</h1>
+      <p>
+        Le CRM Neogia nécessite une connexion internet pour afficher vos données
+        de manière sécurisée. Aucune donnée client ou candidat n'est
+        conservée hors ligne.
+      </p>
+      <button onclick="window.location.reload()">Réessayer</button>
+    </div>
+  </body>
+</html>
