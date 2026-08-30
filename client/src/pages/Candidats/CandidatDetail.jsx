@@ -113,7 +113,7 @@ export default function CandidatDetail() {
               <p className="text-slate2-500 text-sm">{candidat.intitule_profil || candidat.metier || 'Profil non renseigné'}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
             <StatusBadge category="candidat_status" value={candidat.statut} />
             <button className="btn btn-secondary" onClick={() => setEditOpen(true)}><Pencil size={14} /> Modifier</button>
             <button className="btn btn-danger" onClick={archive}><Archive size={14} /> Archiver</button>
