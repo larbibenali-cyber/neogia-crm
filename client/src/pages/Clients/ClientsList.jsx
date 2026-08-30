@@ -280,63 +280,117 @@ function ContactsView() {
       )}
 
       {!loading && !error && data && data.results.length > 0 && (
-        <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate2-50 text-left text-slate2-500 text-xs uppercase tracking-wide">
-                  <Th label="Contact" col="nom" current={filters.sort} dir={filters.sortDir} onClick={toggleSort} />
-                  <Th label="Entreprise" col="entreprise_nom" current={filters.sort} dir={filters.sortDir} onClick={toggleSort} />
-                  <th className="px-4 py-3">Fonction</th>
-                  <th className="px-4 py-3">Coordonnées</th>
-                  <th className="px-4 py-3">Environnement tech.</th>
-                  <Th label="Statut" col="statut" current={filters.sort} dir={filters.sortDir} onClick={toggleSort} />
-                  <Th label="Dernier échange" col="dernier_echange_at" current={filters.sort} dir={filters.sortDir} onClick={toggleSort} />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate2-100">
-                {data.results.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate2-50/60">
-                    <td className="px-4 py-3">
-                      <Link to={`/clients/contact/${c.id}`} className="flex items-center gap-2.5 group">
-                        <Avatar prenom={c.prenom} nom={c.nom} size={32} />
-                        <div>
-                          <div className="font-medium text-slate2-800 group-hover:text-brand">{c.prenom} {c.nom}</div>
-                          {c.incomplete && <div className="text-[11px] text-amber-600">Fiche incomplète</div>}
-                        </div>
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link to={`/clients/entreprise/${c.entreprise_id}`} className="text-slate2-700 hover:text-brand">{c.entreprise_nom}</Link>
-                    </td>
-                    <td className="px-4 py-3 text-slate2-600">{c.fonction || '—'}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-0.5">
-                        {c.email && <a href={`mailto:${c.email}`} className="flex items-center gap-1 text-brand hover:underline text-xs"><Mail size={12} />{c.email}</a>}
-                        {(c.telephone_mobile || c.telephone_fixe) && (
-                          <a href={`tel:${(c.telephone_mobile || c.telephone_fixe).split('/')[0].trim()}`} className="flex items-center gap-1 text-slate2-600 hover:text-brand text-xs">
-                            <Phone size={12} />{c.telephone_mobile || c.telephone_fixe}
-                          </a>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 max-w-[220px]">
-                      <div className="flex flex-wrap gap-1">
-                        {(c.technologies || []).slice(0, 3).map((t) => <TechTag key={t.id} tech={t} size="sm" />)}
-                        {(c.technologies || []).length > 3 && <span className="text-xs text-slate2-400">+{c.technologies.length - 3}</span>}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3"><StatusBadge category="contact_status" value={c.statut} small /></td>
-                    <td className="px-4 py-3 text-slate2-500 text-xs">{formatDate(c.dernier_echange_at)}</td>
+        <>
+          {/* Desktop / tablette : tableau complet, triable */}
+          <div className="hidden sm:block card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate2-50 text-left text-slate2-500 text-xs uppercase tracking-wide">
+                    <Th label="Contact" col="nom" current={filters.sort} dir={filters.sortDir} onClick={toggleSort} />
+                    <Th label="Entreprise" col="entreprise_nom" current={filters.sort} dir={filters.sortDir} onClick={toggleSort} />
+                    <th className="px-4 py-3">Fonction</th>
+                    <th className="px-4 py-3">Coordonnées</th>
+                    <th className="px-4 py-3">Environnement tech.</th>
+                    <Th label="Statut" col="statut" current={filters.sort} dir={filters.sortDir} onClick={toggleSort} />
+                    <Th label="Dernier échange" col="dernier_echange_at" current={filters.sort} dir={filters.sortDir} onClick={toggleSort} />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate2-100">
+                  {data.results.map((c) => (
+                    <tr key={c.id} className="hover:bg-slate2-50/60">
+                      <td className="px-4 py-3">
+                        <Link to={`/clients/contact/${c.id}`} className="flex items-center gap-2.5 group">
+                          <Avatar prenom={c.prenom} nom={c.nom} size={32} />
+                          <div>
+                            <div className="font-medium text-slate2-800 group-hover:text-brand">{c.prenom} {c.nom}</div>
+                            {c.incomplete && <div className="text-[11px] text-amber-600">Fiche incomplète</div>}
+                          </div>
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link to={`/clients/entreprise/${c.entreprise_id}`} className="text-slate2-700 hover:text-brand">{c.entreprise_nom}</Link>
+                      </td>
+                      <td className="px-4 py-3 text-slate2-600">{c.fonction || '—'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-0.5">
+                          {c.email && <a href={`mailto:${c.email}`} className="flex items-center gap-1 text-brand hover:underline text-xs"><Mail size={12} />{c.email}</a>}
+                          {(c.telephone_mobile || c.telephone_fixe) && (
+                            <a href={`tel:${(c.telephone_mobile || c.telephone_fixe).split('/')[0].trim()}`} className="flex items-center gap-1 text-slate2-600 hover:text-brand text-xs">
+                              <Phone size={12} />{c.telephone_mobile || c.telephone_fixe}
+                            </a>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 max-w-[220px]">
+                        <div className="flex flex-wrap gap-1">
+                          {(c.technologies || []).slice(0, 3).map((t) => <TechTag key={t.id} tech={t} size="sm" />)}
+                          {(c.technologies || []).length > 3 && <span className="text-xs text-slate2-400">+{c.technologies.length - 3}</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3"><StatusBadge category="contact_status" value={c.statut} small /></td>
+                      <td className="px-4 py-3 text-slate2-500 text-xs">{formatDate(c.dernier_echange_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-4">
+              <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onChange={(p) => updateParam({ page: p })} />
+            </div>
           </div>
-          <div className="px-4">
+
+          {/* Mobile : cartes lisibles, aucun défilement horizontal */}
+          <div className="sm:hidden space-y-3">
+            {data.results.map((c) => (
+              <Link
+                key={c.id}
+                to={`/clients/contact/${c.id}`}
+                className="card p-4 flex flex-col gap-2.5"
+              >
+                <div className="flex items-center gap-3">
+                  <Avatar prenom={c.prenom} nom={c.nom} size={40} />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-slate2-800 truncate">{c.prenom} {c.nom}</div>
+                    <div className="text-xs text-slate2-500 truncate">{c.entreprise_nom}{c.fonction ? ` — ${c.fonction}` : ''}</div>
+                    {c.incomplete && <div className="text-[11px] text-amber-600">Fiche incomplète</div>}
+                  </div>
+                  <StatusBadge category="contact_status" value={c.statut} small />
+                </div>
+                {(c.email || c.telephone_mobile || c.telephone_fixe) && (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 pt-2 border-t border-slate2-100">
+                    {c.email && (
+                      <a
+                        href={`mailto:${c.email}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1.5 text-brand text-sm py-1"
+                      >
+                        <Mail size={14} />{c.email}
+                      </a>
+                    )}
+                    {(c.telephone_mobile || c.telephone_fixe) && (
+                      <a
+                        href={`tel:${(c.telephone_mobile || c.telephone_fixe).split('/')[0].trim()}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1.5 text-slate2-700 text-sm py-1"
+                      >
+                        <Phone size={14} />{c.telephone_mobile || c.telephone_fixe}
+                      </a>
+                    )}
+                  </div>
+                )}
+                {(c.technologies || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {c.technologies.slice(0, 4).map((t) => <TechTag key={t.id} tech={t} size="sm" />)}
+                    {c.technologies.length > 4 && <span className="text-xs text-slate2-400">+{c.technologies.length - 4}</span>}
+                  </div>
+                )}
+                <div className="text-[11px] text-slate2-400">Dernier échange : {c.dernier_echange_at ? formatDate(c.dernier_echange_at) : 'aucun'}</div>
+              </Link>
+            ))}
             <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onChange={(p) => updateParam({ page: p })} />
           </div>
-        </div>
+        </>
       )}
 
       <ContactFormModal
