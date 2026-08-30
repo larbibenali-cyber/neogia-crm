@@ -76,7 +76,7 @@ export default function BesoinDetail() {
               {besoin.contact && <Link to={`/clients/contact/${besoin.contact.id}`} className="flex items-center gap-1 hover:text-brand"><User size={14} />{besoin.contact.prenom} {besoin.contact.nom}</Link>}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
             <StatusBadge category="besoin_priorite" value={besoin.priorite} />
             <StatusBadge category="besoin_status" value={besoin.statut} />
             <button className="btn btn-primary" onClick={() => setPositionModal({ open: true, candidat: null })}><UserPlus size={14} /> Positionner un candidat</button>
