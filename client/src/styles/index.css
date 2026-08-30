@@ -10,6 +10,12 @@ html, body, #root {
   height: 100%;
 }
 
+@supports (height: 100dvh) {
+  html, body, #root {
+    height: 100dvh;
+  }
+}
+
 body {
   background: #F7F7FB;
   color: #1A1B23;
@@ -91,3 +97,17 @@ h1, h2, h3, .font-heading {
 .btn-danger { background: #FEF2F2; color: #DC2626; }
 .btn-danger:hover { background: #FEE2E2; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Mobile : cibles tactiles confortables (~44pt iOS) et pas de zoom automatique
+   Safari au focus d'un champ (nécessite un font-size >= 16px). */
+@media (max-width: 767px) {
+  .btn {
+    min-height: 44px;
+    padding: 0.65rem 1.1rem;
+    font-size: 0.9rem;
+  }
+  .input {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}
