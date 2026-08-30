@@ -12,7 +12,7 @@ const NAV = [
 
 export default function Sidebar() {
   return (
-    <aside className="w-64 shrink-0 h-screen sticky top-0 bg-white border-r border-slate2-100 flex flex-col">
+    <aside className="hidden md:flex w-64 shrink-0 h-screen sticky top-0 bg-white border-r border-slate2-100 flex-col">
       <div className="px-6 py-7">
         <img src={logo} alt="Neogia" className="h-9 w-auto" />
         <p className="text-[11px] uppercase tracking-widest text-slate2-400 mt-1 font-medium">CRM Data &amp; IA</p>
