@@ -8,6 +8,7 @@ import { EntrepriseLogo, EntrepriseStatusBadge, ENTREPRISE_STATUTS } from '../..
 import TechCloud from '../../components/TechCloud';
 import ContactFormModal from '../../components/ContactFormModal';
 import BesoinFormModal from '../../components/BesoinFormModal';
+import ContactPhones from '../../components/ContactPhones';
 import { timeAgo } from '../../lib/format';
 import { useToast } from '../../lib/ToastContext';
 
@@ -118,14 +119,22 @@ export default function EntrepriseDetail() {
         {ent.contacts.length === 0 ? <EmptyState title="Aucun contact" /> : (
           <div className="grid sm:grid-cols-2 gap-3">
             {ent.contacts.map((c) => (
-              <Link key={c.id} to={`/clients/contact/${c.id}`} className="flex items-center gap-3 p-3 rounded-xl border border-slate2-100 hover:bg-slate2-50">
+              <div
+                key={c.id}
+                role="link"
+                tabIndex={0}
+                onClick={() => navigate(`/clients/contact/${c.id}`)}
+                onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/clients/contact/${c.id}`); }}
+                className="flex items-center gap-3 p-3 rounded-xl border border-slate2-100 hover:bg-slate2-50 cursor-pointer"
+              >
                 <Avatar prenom={c.prenom} nom={c.nom} size={38} />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-slate2-800 truncate">{c.prenom} {c.nom}</p>
                   <p className="text-xs text-slate2-400 truncate">{c.fonction || c.email || '—'}</p>
+                  <ContactPhones contact={c} className="mt-0.5" />
                 </div>
                 <StatusBadge category="contact_status" value={c.statut} small />
-              </Link>
+              </div>
             ))}
           </div>
         )}

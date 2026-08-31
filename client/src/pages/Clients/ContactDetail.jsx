@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
-  Mail, Phone, MapPin, Building2, ArrowLeft, Pencil, Archive, Trash2, Plus,
+  Mail, Phone, Smartphone, MapPin, Building2, ArrowLeft, Pencil, Archive, Trash2, Plus,
   Phone as PhoneIcon, Mail as MailIcon, Linkedin, Users, Video, MessageCircle, Briefcase,
 } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -14,7 +14,7 @@ import BesoinFormModal from '../../components/BesoinFormModal';
 import { usePickLists } from '../../lib/PickListsContext';
 import { useToast } from '../../lib/ToastContext';
 import { useConfirm } from '../../lib/ConfirmContext';
-import { formatDate, timeAgo } from '../../lib/format';
+import { formatDate, timeAgo, formatPhoneFR, phoneHref } from '../../lib/format';
 
 const TYPE_ICONS = { appel: PhoneIcon, email: MailIcon, linkedin: Linkedin, reunion: Users, visio: Video, autre: MessageCircle };
 
@@ -92,9 +92,14 @@ export default function ContactDetail() {
           </div>
         </div>
 
-        <div className="grid sm:grid-cols-3 gap-3 mt-5 pt-5 border-t border-slate2-100 text-sm">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5 pt-5 border-t border-slate2-100 text-sm">
           <InfoRow icon={Mail} value={contact.email} href={contact.email ? `mailto:${contact.email}` : null} />
-          <InfoRow icon={Phone} value={contact.telephone_mobile || contact.telephone_fixe} href={contact.telephone_mobile ? `tel:${contact.telephone_mobile.split('/')[0].trim()}` : null} />
+          {contact.telephone_mobile && (
+            <InfoRow icon={Smartphone} value={formatPhoneFR(contact.telephone_mobile)} href={phoneHref(contact.telephone_mobile)} />
+          )}
+          {contact.telephone_fixe && (
+            <InfoRow icon={Phone} value={formatPhoneFR(contact.telephone_fixe)} href={phoneHref(contact.telephone_fixe)} />
+          )}
           <InfoRow icon={MapPin} value={contact.localisation} />
         </div>
 
