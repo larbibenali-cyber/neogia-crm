@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Building2, User, UserSquare2, Briefcase, Tag, MessageSquare } from 'lucide-react';
+import { Search, X, Building2, User, UserSquare2, Briefcase, Tag, MessageSquare } from 'lucide-react';
 import { api } from '../lib/api';
 
 export default function GlobalSearch() {
@@ -9,8 +9,14 @@ export default function GlobalSearch() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [open, setOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
   const boxRef = useRef(null);
+  const inputRef = useRef(null);
   const navigate = useNavigate();
+  // La loupe ne doit être visible que champ vide ET inactif : dès que l'utilisateur
+  // saisit du texte ou donne le focus au champ, on la masque (jamais de chevauchement
+  // avec le texte saisi ou le bouton d'effacement).
+  const showSearchIcon = !focused && !q;
 
   useEffect(() => {
     if (!q || q.length < 2) { setResults(null); setLoading(false); setError(null); return; }
@@ -36,6 +42,7 @@ export default function GlobalSearch() {
   }, []);
 
   const go = (path) => { setOpen(false); setQ(''); navigate(path); };
+  const clear = () => { setQ(''); setResults(null); setError(null); inputRef.current?.focus(); };
 
   const hasResults = results && (
     results.entreprises.length || results.contacts.length || results.candidats.length ||
@@ -45,14 +52,36 @@ export default function GlobalSearch() {
   return (
     <div className="relative w-full max-w-xl" ref={boxRef}>
       <div className="relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate2-400" />
+        {/* Note : la classe .input pose un `padding` en shorthand qui, selon l'ordre de
+            génération Tailwind, peut écraser les utilitaires pl-9/pr-9 — on fixe donc
+            l'espacement en style inline pour garantir qu'il ne soit jamais repris par
+            l'icône ou le bouton d'effacement, quel que soit l'ordre du CSS compilé. */}
+        <Search
+          size={16}
+          aria-hidden="true"
+          className={`absolute left-3 top-1/2 -translate-y-1/2 text-slate2-400 pointer-events-none transition-opacity duration-150 ${showSearchIcon ? 'opacity-100' : 'opacity-0'}`}
+        />
         <input
-          className="input pl-9"
+          ref={inputRef}
+          className="input"
+          style={{ paddingLeft: '2.25rem', paddingRight: q ? '2.25rem' : '0.75rem' }}
           placeholder="Rechercher un client, contact, candidat, besoin, technologie..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          onFocus={() => q.length >= 2 && setOpen(true)}
+          onFocus={() => { setFocused(true); q.length >= 2 && setOpen(true); }}
+          onBlur={() => setFocused(false)}
         />
+        {q && (
+          <button
+            type="button"
+            onClick={clear}
+            aria-label="Effacer la recherche"
+            title="Effacer"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate2-300 hover:text-slate2-600 hover:bg-slate2-100 rounded-full p-1 transition-colors duration-150"
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
       {open && (loading || error || results) && (
         <div className="absolute mt-2 w-full card shadow-card-hover max-h-[70vh] overflow-y-auto z-50 p-2">
