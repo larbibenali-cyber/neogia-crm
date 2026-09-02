@@ -2,14 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Archive, Mail, Phone, MapPin, UploadCloud, FileText, Download,
-  Trash2, Sparkles, Briefcase,
+  Trash2, Sparkles, Briefcase, Target, Plus,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { supabase } from '../../lib/supabaseClient';
-import { Loading, EmptyState, Avatar, Modal, Field } from '../../components/ui';
+import { Loading, EmptyState, Avatar, Modal, Field, Select } from '../../components/ui';
 import StatusBadge from '../../components/StatusBadge';
 import TechCloud from '../../components/TechCloud';
 import CandidatFormModal from '../../components/CandidatFormModal';
+import BesoinCombo from '../../components/BesoinCombo';
+import { usePickLists } from '../../lib/PickListsContext';
 import { useToast } from '../../lib/ToastContext';
 import { useConfirm } from '../../lib/ConfirmContext';
 import { formatDate } from '../../lib/format';
@@ -20,6 +22,7 @@ export default function CandidatDetail() {
   const [candidat, setCandidat] = useState(null);
   const [tab, setTab] = useState('profil');
   const [editOpen, setEditOpen] = useState(false);
+  const [positionOpen, setPositionOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [extraction, setExtraction] = useState(null);
@@ -115,6 +118,7 @@ export default function CandidatDetail() {
           </div>
           <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
             <StatusBadge category="candidat_status" value={candidat.statut} />
+            <button className="btn btn-primary" onClick={() => setPositionOpen(true)}><Target size={14} /> Positionner sur un besoin</button>
             <button className="btn btn-secondary" onClick={() => setEditOpen(true)}><Pencil size={14} /> Modifier</button>
             <button className="btn btn-danger" onClick={archive}><Archive size={14} /> Archiver</button>
           </div>
@@ -193,7 +197,12 @@ export default function CandidatDetail() {
         {tab === 'positionnements' && (
           <div className="p-6">
             {candidat.positionnements.length === 0 ? (
-              <EmptyState icon={Briefcase} title="Aucun positionnement" description="Ce candidat n'a pas encore été positionné sur un besoin." />
+              <EmptyState
+                icon={Briefcase}
+                title="Aucun positionnement"
+                description="Ce candidat n'a pas encore été positionné sur un besoin."
+                action={<button className="btn btn-primary" onClick={() => setPositionOpen(true)}><Plus size={14} /> Positionner sur un besoin</button>}
+              />
             ) : (
               <div className="space-y-2">
                 {candidat.positionnements.map((p) => (
@@ -216,6 +225,14 @@ export default function CandidatDetail() {
 
       <CandidatFormModal open={editOpen} onClose={() => setEditOpen(false)} candidat={candidat} onSaved={load} />
 
+      <PositionnerModal
+        open={positionOpen}
+        candidatId={id}
+        candidatLabel={`${candidat.prenom} ${candidat.nom}`}
+        onClose={() => setPositionOpen(false)}
+        onSaved={() => { load(); setTab('positionnements'); }}
+      />
+
       <Modal open={!!extraction} onClose={() => setExtraction(null)} title="Informations extraites du CV" wide>
         {extraction && (
           <ExtractionReview extraction={extraction} onValidate={applyExtraction} onCancel={() => setExtraction(null)} />
@@ -227,10 +244,13 @@ export default function CandidatDetail() {
 
 function ExtractionReview({ extraction, onValidate, onCancel }) {
   const [fields, setFields] = useState({
+    prenom: extraction.suggestion.prenom || '',
+    nom: extraction.suggestion.nom || '',
     email: extraction.suggestion.email || '',
     telephone: extraction.suggestion.telephone || '',
     annees_experience: extraction.suggestion.annees_experience || '',
     intitule_profil: extraction.suggestion.intitule_profil || '',
+    technologies: (extraction.suggestion.technologies || []).join(', '),
   });
   return (
     <div>
@@ -239,16 +259,87 @@ function ExtractionReview({ extraction, onValidate, onCancel }) {
         <p>{extraction.note}</p>
       </div>
       <div className="grid md:grid-cols-2 gap-x-4">
+        <Field label="Prénom détecté"><input className="input" value={fields.prenom} onChange={(e) => setFields((f) => ({ ...f, prenom: e.target.value }))} /></Field>
+        <Field label="Nom détecté"><input className="input" value={fields.nom} onChange={(e) => setFields((f) => ({ ...f, nom: e.target.value }))} /></Field>
         <Field label="E-mail détecté"><input className="input" value={fields.email} onChange={(e) => setFields((f) => ({ ...f, email: e.target.value }))} /></Field>
         <Field label="Téléphone détecté"><input className="input" value={fields.telephone} onChange={(e) => setFields((f) => ({ ...f, telephone: e.target.value }))} /></Field>
         <Field label="Années d'expérience détectées"><input className="input" value={fields.annees_experience} onChange={(e) => setFields((f) => ({ ...f, annees_experience: e.target.value }))} /></Field>
         <Field label="Intitulé détecté"><input className="input" value={fields.intitule_profil} onChange={(e) => setFields((f) => ({ ...f, intitule_profil: e.target.value }))} /></Field>
       </div>
+      <Field label="Technologies détectées" hint="Séparées par des virgules">
+        <input className="input" value={fields.technologies} onChange={(e) => setFields((f) => ({ ...f, technologies: e.target.value }))} />
+      </Field>
       <div className="flex justify-end gap-2 mt-2">
         <button className="btn btn-ghost" onClick={onCancel}>Ignorer</button>
-        <button className="btn btn-primary" onClick={() => onValidate(fields)}>Valider et mettre à jour la fiche</button>
+        <button
+          className="btn btn-primary"
+          onClick={() => onValidate({
+            ...fields,
+            technologies: fields.technologies.split(',').map((t) => t.trim()).filter(Boolean),
+          })}
+        >
+          Valider et mettre à jour la fiche
+        </button>
       </div>
     </div>
+  );
+}
+
+function PositionnerModal({ open, candidatId, candidatLabel, onClose, onSaved }) {
+  const [besoinId, setBesoinId] = useState('');
+  const [statut, setStatut] = useState('positionne');
+  const [date, setDate] = useState('');
+  const [tjm, setTjm] = useState('');
+  const [commentaires, setCommentaires] = useState('');
+  const [saving, setSaving] = useState(false);
+  const { getOptions } = usePickLists();
+  const toast = useToast();
+
+  useEffect(() => {
+    if (open) {
+      setBesoinId('');
+      setStatut('positionne');
+      setDate(new Date().toISOString().slice(0, 10));
+      setTjm('');
+      setCommentaires('');
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const submit = async () => {
+    if (!besoinId) return toast('Merci de sélectionner un besoin.', 'error');
+    setSaving(true);
+    try {
+      await api.post('/positionnements', {
+        candidat_id: candidatId, besoin_id: besoinId, statut,
+        date_positionnement: date || undefined, tjm_propose: tjm || null, commentaires,
+      });
+      toast('Candidat positionné sur ce besoin.', 'success');
+      onSaved();
+      onClose();
+    } catch (err) { toast(err.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Positionner ${candidatLabel} sur un besoin`}>
+      <Field label="Besoin" required><BesoinCombo value={besoinId} onChange={setBesoinId} /></Field>
+      <div className="grid md:grid-cols-2 gap-x-4">
+        <Field label="Statut du positionnement">
+          <Select value={statut} onChange={(e) => setStatut(e.target.value)}>
+            {getOptions('positionnement_status').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </Select>
+        </Field>
+        <Field label="Date"><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+        <Field label="TJM proposé (€)"><input type="number" className="input" value={tjm} onChange={(e) => setTjm(e.target.value)} /></Field>
+      </div>
+      <Field label="Commentaire"><textarea className="input" rows={3} value={commentaires} onChange={(e) => setCommentaires(e.target.value)} /></Field>
+      <div className="flex justify-end gap-2 mt-4">
+        <button className="btn btn-ghost" onClick={onClose}>Annuler</button>
+        <button className="btn btn-primary" disabled={saving} onClick={submit}>{saving ? 'Enregistrement...' : 'Confirmer le positionnement'}</button>
+      </div>
+    </Modal>
   );
 }
 
