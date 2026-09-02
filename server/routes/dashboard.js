@@ -14,11 +14,21 @@ router.get('/', async (req, res, next) => {
 
     const today = new Date().toISOString().slice(0, 10);
     const in14 = new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-    const besoinsUrgents = await dbAll(`
-      SELECT b.*, e.nom as entreprise_nom FROM besoins b JOIN entreprises e ON e.id = b.entreprise_id
-      WHERE b.archived = false AND (b.priorite = 'urgente' OR (b.date_demarrage IS NOT NULL AND b.date_demarrage BETWEEN @today AND @in14))
-      ORDER BY b.date_demarrage ASC LIMIT 8
-    `, { today, in14 });
+
+    // Besoins « en cours » (statut_synthese = 'En cours'), triés par degré d'urgence
+    // décroissant (urgente > haute > normale > basse) puis par date de démarrage —
+    // affichés sur le tableau de bord avec les plus urgents en premier.
+    const besoinsEnCours = await dbAll(`
+      SELECT b.*, e.nom as entreprise_nom,
+        (SELECT COUNT(*)::int FROM positionnements p WHERE p.besoin_id = b.id) AS nb_candidats
+      FROM besoins b JOIN entreprises e ON e.id = b.entreprise_id
+      WHERE b.archived = false AND b.statut_synthese = 'En cours'
+      ORDER BY
+        CASE b.priorite WHEN 'urgente' THEN 4 WHEN 'haute' THEN 3 WHEN 'normale' THEN 2 WHEN 'basse' THEN 1 ELSE 0 END DESC,
+        b.date_demarrage ASC NULLS LAST,
+        b.date_identification ASC NULLS LAST
+      LIMIT 15
+    `);
 
     const derniersEchanges = await dbAll(`
       SELECT ech.*, c.nom as contact_nom, c.prenom as contact_prenom, e.nom as entreprise_nom
@@ -109,7 +119,7 @@ router.get('/', async (req, res, next) => {
 
     res.json({
       totaux: { entreprises: totalEntreprises, contacts: totalContacts, candidats: totalCandidats, besoins_ouverts: besoinsOuverts },
-      besoins_urgents: besoinsUrgents,
+      besoins_en_cours: besoinsEnCours,
       derniers_echanges: derniersEchanges,
       dernieres_fiches: dernieresFiches,
       besoins_par_statut: besoinsParStatut,
