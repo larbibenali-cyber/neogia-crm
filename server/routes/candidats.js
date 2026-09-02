@@ -42,6 +42,82 @@ async function attachExtras(c) {
   return c;
 }
 
+// Heuristique best-effort : sur un CV, le nom du candidat apparaît en général
+// dans les toutes premières lignes, souvent en 2 à 4 mots avec majuscules. La
+// convention française fréquente est un mot tout en MAJUSCULES pour le nom de
+// famille ; à défaut on suppose l'ordre "Prénom Nom".
+function extractName(text) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 15);
+  const nameLineRe = /^[A-ZÀ-Ÿ][A-Za-zÀ-ÿ'’-]+(?:\s+[A-ZÀ-Ÿ][A-Za-zÀ-ÿ'’-]+){1,3}$/;
+  for (const line of lines) {
+    if (line.length > 45 || /[0-9@]/.test(line)) continue;
+    if (!nameLineRe.test(line)) continue;
+    const words = line.split(/\s+/);
+    if (words.length < 2 || words.length > 4) continue;
+    const isUpper = (w) => w === w.toUpperCase() && w !== w.toLowerCase();
+    const upperWords = words.filter(isUpper);
+    const otherWords = words.filter((w) => !isUpper(w));
+    if (upperWords.length > 0 && otherWords.length > 0) {
+      return { nom: upperWords.join(' '), prenom: otherWords.join(' ') };
+    }
+    return { prenom: words.slice(0, -1).join(' '), nom: words[words.length - 1] };
+  }
+  return { prenom: null, nom: null };
+}
+
+// Repli si aucune ligne ne ressemble à un nom : on tente de déduire prénom/nom
+// depuis l'adresse e-mail détectée (ex: jean.dupont@... -> Jean / Dupont).
+function nameFromEmail(email) {
+  if (!email) return { prenom: null, nom: null };
+  const local = email.split('@')[0];
+  const parts = local.split(/[._-]+/).filter(Boolean);
+  if (parts.length >= 2 && parts.every((p) => /^[a-zA-Z]+$/.test(p))) {
+    const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+    return { prenom: cap(parts[0]), nom: cap(parts[parts.length - 1]) };
+  }
+  return { prenom: null, nom: null };
+}
+
+// Repère dans le texte du CV les technologies déjà connues en base (table
+// `technologies`, alimentée par les fiches existantes) pour pré-remplir
+// l'environnement technique du candidat.
+async function matchTechnologies(text) {
+  const known = await dbAll('SELECT nom FROM technologies', []);
+  const found = [];
+  for (const { nom } of known) {
+    if (!nom || nom.length < 2) continue;
+    const escaped = nom.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = /^[a-z0-9]+$/i.test(nom) ? new RegExp(`\\b${escaped}\\b`, 'i') : new RegExp(escaped, 'i');
+    if (re.test(text)) found.push(nom);
+  }
+  return found.slice(0, 20);
+}
+
+// Extraction (best-effort) des infos principales d'un CV PDF, utilisée à la
+// fois pour pré-remplir une fiche candidat existante et pour pré-remplir le
+// formulaire de création d'un nouveau candidat.
+async function extractCvFields(buffer) {
+  const pdfParse = require('pdf-parse');
+  const data = await pdfParse(buffer);
+  const text = data.text || '';
+  const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const phoneMatch = text.match(/(0|\+33\s?)[1-9](?:[\s.-]?\d{2}){4}/);
+  const expMatch = text.match(/(\d{1,2})\s*(?:ans|an|years?)\s*(?:d['’]?exp[ée]rience)?/i);
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const email = emailMatch ? emailMatch[0] : null;
+  let { prenom, nom } = extractName(text);
+  if (!prenom && !nom) ({ prenom, nom } = nameFromEmail(email));
+  const technologies = await matchTechnologies(text);
+  return {
+    prenom, nom, email,
+    telephone: phoneMatch ? phoneMatch[0] : null,
+    annees_experience: expMatch ? parseInt(expMatch[1], 10) : null,
+    intitule_profil: lines.length ? lines[0].slice(0, 120) : null,
+    technologies,
+    texte_brut_apercu: text.slice(0, 2000),
+  };
+}
+
 async function setTechnologies(candidatId, techNames) {
   await dbRun('DELETE FROM candidat_technologies WHERE candidat_id = ?', [candidatId]);
   for (const name of (techNames || [])) {
@@ -181,6 +257,19 @@ router.delete('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Extraction à la volée pour pré-remplir le formulaire de CRÉATION d'un
+// candidat (aucune fiche n'existe encore à ce stade) : le fichier n'est ni
+// stocké ni rattaché à quoi que ce soit ici, seul le texte est analysé.
+router.post('/cv-extract', upload.single('cv'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu (champ "cv" attendu, PDF uniquement)' });
+    const suggestion = await extractCvFields(req.file.buffer);
+    res.json({ suggestion, note: 'Extraction automatique indicative : merci de vérifier et compléter les champs avant de créer la fiche.' });
+  } catch (err) {
+    res.status(500).json({ error: `Extraction impossible : ${err.message}` });
+  }
+});
+
 // ---- CV (stockage privé Supabase Storage) ----
 router.post('/:id/cv', upload.single('cv'), async (req, res, next) => {
   try {
@@ -227,21 +316,8 @@ router.post('/:id/cv/:cvId/extract', async (req, res) => {
   try {
     const cv = await dbGet('SELECT * FROM cvs WHERE id = ? AND candidat_id = ?', [req.params.cvId, req.params.id]);
     if (!cv) return res.status(404).json({ error: 'CV introuvable' });
-    const pdfParse = require('pdf-parse');
     const buffer = await downloadCv(cv.storage_path);
-    const data = await pdfParse(buffer);
-    const text = data.text || '';
-    const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-    const phoneMatch = text.match(/(0|\+33\s?)[1-9](?:[\s.-]?\d{2}){4}/);
-    const expMatch = text.match(/(\d{1,2})\s*(?:ans|an|years?)\s*(?:d['’]?exp[ée]rience)?/i);
-    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    const suggestion = {
-      email: emailMatch ? emailMatch[0] : null,
-      telephone: phoneMatch ? phoneMatch[0] : null,
-      annees_experience: expMatch ? parseInt(expMatch[1], 10) : null,
-      intitule_profil: lines.length ? lines[0].slice(0, 120) : null,
-      texte_brut_apercu: text.slice(0, 2000),
-    };
+    const suggestion = await extractCvFields(buffer);
     res.json({ suggestion, note: 'Extraction automatique indicative : merci de vérifier et valider chaque champ avant enregistrement.' });
   } catch (err) {
     res.status(500).json({ error: `Extraction impossible : ${err.message}` });
