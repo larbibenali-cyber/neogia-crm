@@ -76,6 +76,48 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <div className="grid lg:grid-cols-2 gap-5">
+        <div className="card p-5">
+          <h2 className="font-heading font-semibold text-slate2-900 mb-4 flex items-center gap-2"><Briefcase size={18} className="text-brand" /> Besoins en cours</h2>
+          {besoins_en_cours.length === 0 && <p className="text-sm text-slate2-400">Aucun besoin en cours.</p>}
+          <ul className="divide-y divide-slate2-100">
+            {besoins_en_cours.map((b) => (
+              <li key={b.id}>
+                <Link to={`/besoins/${b.id}`} className="flex items-center justify-between gap-3 py-2.5 group hover:bg-brand-50 -mx-2 px-2 rounded-lg transition-colors">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate2-800 group-hover:text-brand truncate">
+                      {b.titre} <span className="text-slate2-400 font-normal">— {b.entreprise_nom}</span>
+                    </p>
+                    <p className="text-xs text-slate2-500 mt-0.5">
+                      {b.date_demarrage && <>Démarrage {formatDate(b.date_demarrage)} · </>}{b.nb_candidats} candidat(s) positionné(s)
+                    </p>
+                  </div>
+                  <span className="shrink-0 flex items-center gap-2">
+                    <StatusBadge category="besoin_priorite" value={b.priorite} small />
+                    <ArrowRight size={14} className="text-slate2-300 group-hover:text-brand" />
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="card p-5">
+          <h2 className="font-heading font-semibold text-slate2-900 mb-4 flex items-center gap-2"><TrendingUp size={18} className="text-brand" /> Derniers positionnements</h2>
+          {candidats_positionnes_recemment.length === 0 && <p className="text-sm text-slate2-400">Aucun positionnement.</p>}
+          <ul className="divide-y divide-slate2-100">
+            {candidats_positionnes_recemment.map((p) => (
+              <li key={p.id} className="py-2.5">
+                <Link to={`/besoins/${p.besoin_id}`} className="flex items-center justify-between group">
+                  <span className="text-sm text-slate2-800 group-hover:text-brand">{p.candidat_prenom} {p.candidat_nom} <span className="text-slate2-400">→ {p.besoin_titre}</span></span>
+                  <StatusBadge category="positionnement_status" value={p.statut} small />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
       {(alertes.relances_en_retard.length > 0 || alertes.besoins_sans_candidat.length > 0 || alertes.candidats_prochainement_disponibles.length > 0 || alertes.fiches_incompletes > 0) && (
         <div className="card p-5 border-l-4 border-l-amber-400">
           <div className="flex items-center gap-2 mb-3">
@@ -178,48 +220,6 @@ export default function Dashboard() {
             ))}
             {besoins_par_statut.length === 0 && <p className="text-sm text-slate2-400">Aucun besoin enregistré.</p>}
           </div>
-        </div>
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-5">
-        <div className="card p-5">
-          <h2 className="font-heading font-semibold text-slate2-900 mb-4 flex items-center gap-2"><Briefcase size={18} className="text-brand" /> Besoins en cours</h2>
-          {besoins_en_cours.length === 0 && <p className="text-sm text-slate2-400">Aucun besoin en cours.</p>}
-          <ul className="divide-y divide-slate2-100">
-            {besoins_en_cours.map((b) => (
-              <li key={b.id}>
-                <Link to={`/besoins/${b.id}`} className="flex items-center justify-between gap-3 py-2.5 group hover:bg-brand-50 -mx-2 px-2 rounded-lg transition-colors">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate2-800 group-hover:text-brand truncate">
-                      {b.titre} <span className="text-slate2-400 font-normal">— {b.entreprise_nom}</span>
-                    </p>
-                    <p className="text-xs text-slate2-500 mt-0.5">
-                      {b.date_demarrage && <>Démarrage {formatDate(b.date_demarrage)} · </>}{b.nb_candidats} candidat(s) positionné(s)
-                    </p>
-                  </div>
-                  <span className="shrink-0 flex items-center gap-2">
-                    <StatusBadge category="besoin_priorite" value={b.priorite} small />
-                    <ArrowRight size={14} className="text-slate2-300 group-hover:text-brand" />
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="card p-5">
-          <h2 className="font-heading font-semibold text-slate2-900 mb-4 flex items-center gap-2"><TrendingUp size={18} className="text-brand" /> Derniers positionnements</h2>
-          {candidats_positionnes_recemment.length === 0 && <p className="text-sm text-slate2-400">Aucun positionnement.</p>}
-          <ul className="divide-y divide-slate2-100">
-            {candidats_positionnes_recemment.map((p) => (
-              <li key={p.id} className="py-2.5">
-                <Link to={`/besoins/${p.besoin_id}`} className="flex items-center justify-between group">
-                  <span className="text-sm text-slate2-800 group-hover:text-brand">{p.candidat_prenom} {p.candidat_nom} <span className="text-slate2-400">→ {p.besoin_titre}</span></span>
-                  <StatusBadge category="positionnement_status" value={p.statut} small />
-                </Link>
-              </li>
-            ))}
-          </ul>
         </div>
       </div>
 
