@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Filter, Mail, Phone, ArrowUpDown, Download, X, Users, Building2 } from 'lucide-react';
 import { api, qs, downloadFile } from '../../lib/api';
 import { Loading, Pagination, EmptyState, Avatar } from '../../components/ui';
@@ -7,6 +7,7 @@ import StatusBadge from '../../components/StatusBadge';
 import { EntrepriseLogo, EntrepriseStatusBadge } from '../../components/EntrepriseBadges';
 import { TechTag } from '../../components/TechCloud';
 import ContactFormModal from '../../components/ContactFormModal';
+import EntrepriseFormModal from '../../components/EntrepriseFormModal';
 import { usePickLists } from '../../lib/PickListsContext';
 import { formatDate, timeAgo } from '../../lib/format';
 import { useToast } from '../../lib/ToastContext';
@@ -55,10 +56,12 @@ export default function ClientsList() {
 // Vue "Entreprises" — une ligne par entreprise, jamais de doublon.
 // ============================================================================
 function EntreprisesView() {
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [createModal, setCreateModal] = useState(false);
 
   const filters = {
     search: params.get('search') || '',
@@ -85,6 +88,10 @@ function EntreprisesView() {
 
   return (
     <div className="space-y-5">
+      <div className="flex justify-end -mt-2">
+        <button className="btn btn-primary" onClick={() => setCreateModal(true)}><Plus size={16} /> Nouvelle entreprise</button>
+      </div>
+
       <div className="card p-4">
         <div className="flex gap-3 items-center flex-wrap">
           <input
@@ -154,6 +161,12 @@ function EntreprisesView() {
         </div>
       )}
       {!loading && !error && data && <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onChange={(p) => updateParam({ page: p })} />}
+
+      <EntrepriseFormModal
+        open={createModal}
+        onClose={() => setCreateModal(false)}
+        onSaved={(e) => navigate(`/clients/entreprise/${e.id}`)}
+      />
     </div>
   );
 }
