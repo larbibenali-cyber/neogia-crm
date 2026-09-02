@@ -144,7 +144,14 @@ export default function ContactDetail() {
                 {contact.echanges.map((e) => {
                   const Icon = TYPE_ICONS[e.type] || MessageCircle;
                   return (
-                    <li key={e.id} className="ml-6">
+                    <li
+                      key={e.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setEchangeModal({ open: true, echange: e })}
+                      onKeyDown={(ev) => { if (ev.key === 'Enter') setEchangeModal({ open: true, echange: e }); }}
+                      className="ml-6 -my-1 py-1 -mr-2 pr-2 rounded-lg cursor-pointer hover:bg-slate2-50 transition-colors"
+                    >
                       <span className="absolute -left-[11px] flex items-center justify-center w-6 h-6 rounded-full bg-brand-50 border-2 border-white">
                         <Icon size={12} className="text-brand" />
                       </span>
@@ -155,9 +162,9 @@ export default function ContactDetail() {
                           {e.date_approximative && <span className="text-[11px] text-slate2-400">(date approximative)</span>}
                         </div>
                         <div className="flex gap-1">
-                          <button className="btn btn-ghost !px-2 !py-1" onClick={() => setEchangeModal({ open: true, echange: e })}><Pencil size={13} /></button>
-                          <button className="btn btn-ghost !px-2 !py-1 text-red-500" onClick={() => deleteEchange(e.id)}><Trash2 size={13} /></button>
-                          <button className="btn btn-secondary !px-2 !py-1" onClick={() => createBesoinFromEchange(e)}><Briefcase size={13} /> Créer un besoin</button>
+                          <button className="btn btn-ghost !px-2 !py-1" onClick={(ev) => { ev.stopPropagation(); setEchangeModal({ open: true, echange: e }); }}><Pencil size={13} /></button>
+                          <button className="btn btn-ghost !px-2 !py-1 text-red-500" onClick={(ev) => { ev.stopPropagation(); deleteEchange(e.id); }}><Trash2 size={13} /></button>
+                          <button className="btn btn-secondary !px-2 !py-1" onClick={(ev) => { ev.stopPropagation(); createBesoinFromEchange(e); }}><Briefcase size={13} /> Créer un besoin</button>
                         </div>
                       </div>
                       {e.objet && <p className="text-sm font-medium text-slate2-700 mt-1">{e.objet}</p>}

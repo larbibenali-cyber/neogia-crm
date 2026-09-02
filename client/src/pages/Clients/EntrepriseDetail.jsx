@@ -9,6 +9,7 @@ import TechCloud from '../../components/TechCloud';
 import ContactFormModal from '../../components/ContactFormModal';
 import BesoinFormModal from '../../components/BesoinFormModal';
 import ContactPhones from '../../components/ContactPhones';
+import EchangeFormModal from '../../components/EchangeFormModal';
 import { timeAgo } from '../../lib/format';
 import { useToast } from '../../lib/ToastContext';
 
@@ -20,6 +21,7 @@ export default function EntrepriseDetail() {
   const [contactModal, setContactModal] = useState(false);
   const [besoinModal, setBesoinModal] = useState(false);
   const [editModal, setEditModal] = useState(false);
+  const [echangeModal, setEchangeModal] = useState({ open: false, echange: null });
   const [newTech, setNewTech] = useState('');
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef(null);
@@ -167,26 +169,24 @@ export default function EntrepriseDetail() {
         {(!ent.echanges || ent.echanges.length === 0) ? <EmptyState title="Aucun échange enregistré" /> : (
           <ul className="divide-y divide-slate2-100">
             {ent.echanges.map((e) => (
-              <li key={e.id} className="py-2.5">
-                {e.contact_id ? (
-                  <Link to={`/clients/contact/${e.contact_id}`} className="flex items-start justify-between gap-3 group">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate2-800 group-hover:text-brand truncate">
-                        {e.contact_prenom} {e.contact_nom} <span className="text-slate2-400 font-normal">— {e.objet || 'Échange'}</span>
-                      </p>
-                      {e.compte_rendu && <p className="text-xs text-slate2-500 truncate mt-0.5">{e.compte_rendu}</p>}
-                    </div>
-                    <span className="text-xs text-slate2-400 shrink-0 flex items-center gap-1"><Clock size={12} />{e.date_echange ? timeAgo(e.date_echange) : 'Date inconnue'}</span>
-                  </Link>
-                ) : (
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate2-800 truncate">{e.objet || 'Échange'}</p>
-                      {e.compte_rendu && <p className="text-xs text-slate2-500 truncate mt-0.5">{e.compte_rendu}</p>}
-                    </div>
-                    <span className="text-xs text-slate2-400 shrink-0 flex items-center gap-1"><Clock size={12} />{e.date_echange ? timeAgo(e.date_echange) : 'Date inconnue'}</span>
+              <li key={e.id}>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setEchangeModal({ open: true, echange: e })}
+                  onKeyDown={(ev) => { if (ev.key === 'Enter') setEchangeModal({ open: true, echange: e }); }}
+                  className="flex items-start justify-between gap-3 py-2.5 -mx-2 px-2 rounded-lg cursor-pointer hover:bg-slate2-50 transition-colors"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate2-800 truncate">
+                      {e.contact_id ? (
+                        <>{e.contact_prenom} {e.contact_nom} <span className="text-slate2-400 font-normal">— {e.objet || 'Échange'}</span></>
+                      ) : (e.objet || 'Échange')}
+                    </p>
+                    {e.compte_rendu && <p className="text-xs text-slate2-500 truncate mt-0.5">{e.compte_rendu}</p>}
                   </div>
-                )}
+                  <span className="text-xs text-slate2-400 shrink-0 flex items-center gap-1"><Clock size={12} />{e.date_echange ? timeAgo(e.date_echange) : 'Date inconnue'}</span>
+                </div>
               </li>
             ))}
           </ul>
@@ -196,6 +196,12 @@ export default function EntrepriseDetail() {
       <ContactFormModal open={contactModal} onClose={() => setContactModal(false)} defaultEntrepriseId={ent.id} onSaved={load} />
       <BesoinFormModal open={besoinModal} onClose={() => setBesoinModal(false)} defaults={{ entreprise_id: ent.id }} onSaved={load} />
       <EditEntrepriseModal open={editModal} onClose={() => setEditModal(false)} entreprise={ent} onSaved={load} />
+      <EchangeFormModal
+        open={echangeModal.open}
+        onClose={() => setEchangeModal({ open: false, echange: null })}
+        echange={echangeModal.echange}
+        onSaved={load}
+      />
     </div>
   );
 }
