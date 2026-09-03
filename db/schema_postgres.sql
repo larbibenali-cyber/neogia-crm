@@ -200,6 +200,7 @@ CREATE TABLE IF NOT EXISTS positionnements (
   statut TEXT NOT NULL DEFAULT 'a_etudier',
   commentaires TEXT,
   date_entretien TEXT,
+  heure_entretien TEXT,
   retour_client TEXT,
   score_compatibilite REAL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
