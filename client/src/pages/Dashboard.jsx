@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Building2, UserSquare2, Briefcase, AlertCircle, Plus, MessageSquarePlus,
+  Building2, UserSquare2, Briefcase, BarChart3, Plus, MessageSquarePlus,
   UserPlus, FilePlus2, Target, Clock, TrendingUp, ArrowRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -23,6 +23,40 @@ function StatCard({ icon: Icon, label, value, color, onClick }) {
         <div className="text-sm text-slate2-500">{label}</div>
       </div>
     </button>
+  );
+}
+
+function ActivityBarChart({ data }) {
+  const BAR_H = 120;
+  const max = Math.max(1, ...data.map((d) => d.value));
+  const moisLabel = new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  return (
+    <div className="card p-5">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="font-heading font-semibold text-slate2-900 flex items-center gap-2">
+          <BarChart3 size={18} className="text-brand" /> Activité du mois
+        </h2>
+        <span className="text-xs text-slate2-400 capitalize">{moisLabel}</span>
+      </div>
+      <p className="text-xs text-slate2-500 mb-6">Depuis le 1er du mois en cours</p>
+      <div className="flex items-end justify-around gap-8 px-2 pb-3 border-b border-slate2-200">
+        {data.map((d) => (
+          <div key={d.key} className="flex flex-col items-center flex-1">
+            <span className="text-lg font-heading font-semibold text-slate2-900 mb-1.5">{d.value}</span>
+            <div
+              className="w-full max-w-[64px] rounded-t-lg transition-all duration-500"
+              style={{ height: Math.max(6, Math.round((d.value / max) * BAR_H)), background: d.color }}
+              title={`${d.label} : ${d.value}`}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-around gap-8 px-2 mt-2.5">
+        {data.map((d) => (
+          <span key={d.key} className="flex-1 text-center text-xs text-slate2-500 leading-tight">{d.label}</span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -48,8 +82,13 @@ export default function Dashboard() {
 
   if (error) return <div className="card p-8 text-center text-slate2-500">{error}</div>;
   if (!data) return <Loading />;
-  const { totaux, besoins_en_cours, derniers_echanges, dernieres_fiches, besoins_par_statut, besoins_prioritaires, candidats_positionnes_recemment, alertes } = data;
+  const { totaux, besoins_en_cours, derniers_echanges, dernieres_fiches, besoins_par_statut, besoins_prioritaires, candidats_positionnes_recemment, activite_mois } = data;
   const maxStatut = Math.max(1, ...besoins_par_statut.map((b) => b.n));
+  const activiteMoisData = [
+    { key: 'besoins', label: 'Besoins détectés', value: activite_mois.besoins_detectes, color: '#B45309' },
+    { key: 'positionnes', label: 'Candidats positionnés', value: activite_mois.candidats_positionnes, color: '#047857' },
+    { key: 'entretiens', label: 'Entretiens réalisés', value: activite_mois.entretiens_realises, color: '#4527EA' },
+  ];
 
   return (
     <div className="space-y-8">
@@ -118,61 +157,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {(alertes.relances_en_retard.length > 0 || alertes.besoins_sans_candidat.length > 0 || alertes.candidats_prochainement_disponibles.length > 0 || alertes.fiches_incompletes > 0) && (
-        <div className="card p-5 border-l-4 border-l-amber-400">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertCircle size={18} className="text-amber-500" />
-            <h2 className="font-heading font-semibold text-slate2-900">Alertes &amp; relances</h2>
-          </div>
-          <div className="grid md:grid-cols-2 gap-4 text-sm">
-            {alertes.relances_en_retard.length > 0 && (
-              <div>
-                <p className="font-medium text-slate2-700 mb-1">Relances arrivées à échéance ({alertes.relances_en_retard.length})</p>
-                <ul className="space-y-1">
-                  {alertes.relances_en_retard.slice(0, 5).map((r) => (
-                    <li key={r.id}>
-                      <Link to={`/clients/contact/${r.contact_id}`} className="text-brand hover:underline">
-                        {r.contact_prenom} {r.contact_nom}
-                      </Link> — {r.entreprise_nom} <span className="text-slate2-400">({formatDate(r.date_relance)})</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {alertes.besoins_sans_candidat.length > 0 && (
-              <div>
-                <p className="font-medium text-slate2-700 mb-1">Besoins sans candidat positionné ({alertes.besoins_sans_candidat.length})</p>
-                <ul className="space-y-1">
-                  {alertes.besoins_sans_candidat.slice(0, 5).map((b) => (
-                    <li key={b.id}>
-                      <Link to={`/besoins/${b.id}`} className="text-brand hover:underline">{b.titre}</Link> — {b.entreprise_nom}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {alertes.candidats_prochainement_disponibles.length > 0 && (
-              <div>
-                <p className="font-medium text-slate2-700 mb-1">Candidats prochainement disponibles ({alertes.candidats_prochainement_disponibles.length})</p>
-                <ul className="space-y-1">
-                  {alertes.candidats_prochainement_disponibles.slice(0, 5).map((c) => (
-                    <li key={c.id}>
-                      <Link to={`/candidats/${c.id}`} className="text-brand hover:underline">{c.prenom} {c.nom}</Link>
-                      {c.disponibilite_date && <span className="text-slate2-400"> — dès le {formatDate(c.disponibilite_date)}</span>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {alertes.fiches_incompletes > 0 && (
-              <div>
-                <p className="font-medium text-slate2-700 mb-1">Fiches incomplètes</p>
-                <Link to="/clients?view=contacts&incomplete=true" className="text-brand hover:underline">{alertes.fiches_incompletes} fiche(s) sans e-mail ni téléphone</Link>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <ActivityBarChart data={activiteMoisData} />
 
       <div className="grid lg:grid-cols-3 gap-5">
         <div className="card p-5 lg:col-span-2">
