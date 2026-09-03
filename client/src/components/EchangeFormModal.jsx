@@ -4,7 +4,23 @@ import { usePickLists } from '../lib/PickListsContext';
 import { useToast } from '../lib/ToastContext';
 import { api } from '../lib/api';
 
-const EMPTY = { date_echange: new Date().toISOString().slice(0, 10), type: 'appel', objet: '', compte_rendu: '', prochaine_action: '', date_relance: '', auteur: 'Administrateur Neogia' };
+// Format une Date en "YYYY-MM-DDTHH:MM" en heure LOCALE (contrairement à
+// toISOString() qui convertit en UTC) — c'est le format attendu par un
+// input type="datetime-local".
+function toLocalDatetimeInput(d) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Une date_echange existante peut ne contenir que "YYYY-MM-DD" (échanges
+// créés avant l'ajout de l'heure, ou import en masse) : on complète avec
+// 00:00 pour que l'input datetime-local l'affiche correctement.
+function toDatetimeInputValue(v) {
+  if (!v) return toLocalDatetimeInput(new Date());
+  return v.includes('T') ? v.slice(0, 16) : `${v}T00:00`;
+}
+
+const EMPTY = { date_echange: toLocalDatetimeInput(new Date()), type: 'appel', objet: '', compte_rendu: '', prochaine_action: '', date_relance: '', auteur: 'Administrateur Neogia' };
 const OBJET_PRESETS = ['Appel', 'Mail', 'Rendez-vous'];
 
 export default function EchangeFormModal({ open, onClose, onSaved, contactId, echange }) {
@@ -16,7 +32,7 @@ export default function EchangeFormModal({ open, onClose, onSaved, contactId, ec
 
   useEffect(() => {
     if (open) {
-      const next = echange ? { ...EMPTY, ...echange, date_echange: echange.date_echange || EMPTY.date_echange } : EMPTY;
+      const next = echange ? { ...EMPTY, ...echange, date_echange: toDatetimeInputValue(echange.date_echange) } : EMPTY;
       setForm(next);
       setObjetCustom(!!next.objet && !OBJET_PRESETS.includes(next.objet));
     }
@@ -52,7 +68,7 @@ export default function EchangeFormModal({ open, onClose, onSaved, contactId, ec
   return (
     <Modal open={open} onClose={onClose} title={echange ? "Modifier l'échange" : 'Nouvel échange'} wide>
       <div className="grid grid-cols-2 gap-x-4">
-        <Field label="Date" required><input type="date" className="input" value={form.date_echange || ''} onChange={set('date_echange')} /></Field>
+        <Field label="Date et heure" required><input type="datetime-local" className="input" value={form.date_echange || ''} onChange={set('date_echange')} /></Field>
         <Field label="Type">
           <Select value={form.type} onChange={set('type')}>
             {getOptions('echange_type').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
