@@ -14,6 +14,8 @@ router.get('/', async (req, res, next) => {
 
     const today = new Date().toISOString().slice(0, 10);
     const in14 = new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
 
     // Besoins « en cours » (statut_synthese = 'En cours'), triés par degré d'urgence
     // décroissant (urgente > haute > normale > basse) puis par date de démarrage —
@@ -117,6 +119,23 @@ router.get('/', async (req, res, next) => {
 
     const fichesIncompletes = (await dbGet(`SELECT COUNT(*) c FROM contacts WHERE incomplete = true AND archived = false`)).c;
 
+    // Activité du mois en cours (depuis le 1er du mois) — alimente le diagramme en
+    // bâtons du tableau de bord : besoins détectés, candidats positionnés, entretiens
+    // réalisés. Les entretiens sont comptés via l'historique des positionnements
+    // (positionnement_etapes.statut_apres), qui trace automatiquement tout changement
+    // de statut, qu'il vienne du flux « Entretien planifié/réalisé » ou d'une mise à
+    // jour manuelle.
+    const besoinsDetectesMois = (await dbGet(
+      `SELECT COUNT(*)::int c FROM besoins WHERE created_at >= @monthStart`, { monthStart }
+    )).c;
+    const candidatsPositionnesMois = (await dbGet(
+      `SELECT COUNT(*)::int c FROM positionnements WHERE created_at >= @monthStart`, { monthStart }
+    )).c;
+    const entretiensRealisesMois = (await dbGet(`
+      SELECT COUNT(DISTINCT positionnement_id)::int c FROM positionnement_etapes
+      WHERE statut_apres = 'entretien_realise' AND date_etape >= @monthStart
+    `, { monthStart })).c;
+
     res.json({
       totaux: { entreprises: totalEntreprises, contacts: totalContacts, candidats: totalCandidats, besoins_ouverts: besoinsOuverts },
       besoins_en_cours: besoinsEnCours,
@@ -130,6 +149,11 @@ router.get('/', async (req, res, next) => {
         besoins_sans_candidat: besoinsSansCandidat,
         candidats_prochainement_disponibles: candidatsProchainementDisponibles,
         fiches_incompletes: fichesIncompletes,
+      },
+      activite_mois: {
+        besoins_detectes: besoinsDetectesMois,
+        candidats_positionnes: candidatsPositionnesMois,
+        entretiens_realises: entretiensRealisesMois,
       },
     });
   } catch (err) { next(err); }
