@@ -15,6 +15,8 @@ import { useToast } from '../../lib/ToastContext';
 import { useConfirm } from '../../lib/ConfirmContext';
 import { formatDate, formatMoney } from '../../lib/format';
 
+const ENTRETIEN_STATUTS = ['entretien_planifie', 'entretien_realise'];
+
 export default function BesoinDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -47,10 +49,16 @@ export default function BesoinDetail() {
     navigate('/besoins');
   };
 
-  const updatePositionStatus = async (posId, statut) => {
-    await api.put(`/positionnements/${posId}`, { statut });
+  const updatePositionStatus = async (p, statut) => {
+    await api.put(`/positionnements/${p.id}`, { statut });
     toast('Statut du positionnement mis à jour.', 'success');
-    load();
+    if (ENTRETIEN_STATUTS.includes(statut)) {
+      // Redirection automatique vers la fiche du candidat, onglet Entretien, pour
+      // renseigner la date et l'heure de l'entretien.
+      navigate(`/candidats/${p.candidat_id}`, { state: { tab: 'entretien', focusPositionId: p.id } });
+    } else {
+      load();
+    }
   };
 
   const deletePositionnement = async (p) => {
@@ -150,7 +158,7 @@ export default function BesoinDetail() {
                       </Link>
                       <div className="flex items-center gap-2">
                         {p.score_compatibilite !== null && <span className="text-xs font-semibold text-brand">{Math.round(p.score_compatibilite)}% compatibilité</span>}
-                        <select className="input !py-1 !text-xs w-auto" value={p.statut} onChange={(e) => updatePositionStatus(p.id, e.target.value)}>
+                        <select className="input !py-1 !text-xs w-auto" value={p.statut} onChange={(e) => updatePositionStatus(p, e.target.value)}>
                           <PositionStatusOptions />
                         </select>
                         <button className="btn btn-ghost !py-1 !px-2 !text-xs" onClick={() => setEtapeModal({ open: true, positionnement: p })}><History size={13} /> Étape</button>
