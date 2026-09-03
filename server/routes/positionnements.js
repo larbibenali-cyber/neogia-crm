@@ -62,14 +62,15 @@ router.post('/', async (req, res, next) => {
 
     try {
       const row = await dbGet(`
-        INSERT INTO positionnements (candidat_id, besoin_id, date_positionnement, tjm_propose, statut, commentaires, date_entretien, retour_client, score_compatibilite, created_at, updated_at)
-        VALUES (@candidat_id, @besoin_id, @date_positionnement, @tjm_propose, @statut, @commentaires, @date_entretien, @retour_client, @score, now(), now()) RETURNING id
+        INSERT INTO positionnements (candidat_id, besoin_id, date_positionnement, tjm_propose, statut, commentaires, date_entretien, heure_entretien, retour_client, score_compatibilite, created_at, updated_at)
+        VALUES (@candidat_id, @besoin_id, @date_positionnement, @tjm_propose, @statut, @commentaires, @date_entretien, @heure_entretien, @retour_client, @score, now(), now()) RETURNING id
       `, {
         candidat_id: b.candidat_id, besoin_id: b.besoin_id,
         date_positionnement: b.date_positionnement || new Date().toISOString().slice(0, 10),
         tjm_propose: (b.tjm_propose === '' || b.tjm_propose === undefined) ? null : Number(b.tjm_propose),
         statut: b.statut || 'positionne',
         commentaires: b.commentaires || '', date_entretien: b.date_entretien || null,
+        heure_entretien: b.heure_entretien || null,
         retour_client: b.retour_client || '', score,
       });
       // Historique : première étape automatique traçant la création du positionnement.
@@ -100,12 +101,13 @@ router.put('/:id', async (req, res, next) => {
     const tjm_propose = b.tjm_propose !== undefined ? (b.tjm_propose === '' ? null : Number(b.tjm_propose)) : existing.tjm_propose;
     await dbRun(`
       UPDATE positionnements SET tjm_propose=@tjm_propose, statut=@statut, commentaires=@commentaires,
-        date_entretien=@date_entretien, retour_client=@retour_client, updated_at=now()
+        date_entretien=@date_entretien, heure_entretien=@heure_entretien, retour_client=@retour_client, updated_at=now()
       WHERE id=@id
     `, {
       id: req.params.id,
       tjm_propose, statut: b.statut ?? existing.statut,
       commentaires: b.commentaires ?? existing.commentaires, date_entretien: b.date_entretien ?? existing.date_entretien,
+      heure_entretien: b.heure_entretien ?? existing.heure_entretien,
       retour_client: b.retour_client ?? existing.retour_client,
     });
     // Si le statut change, on trace automatiquement une étape dans l'historique
