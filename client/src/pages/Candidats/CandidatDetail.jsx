@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Archive, Mail, Phone, MapPin, UploadCloud, FileText, Download,
-  Trash2, Sparkles, Briefcase, Target, Plus,
+  Trash2, Sparkles, Briefcase, Target, Plus, CalendarClock,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { supabase } from '../../lib/supabaseClient';
@@ -16,9 +16,12 @@ import { useToast } from '../../lib/ToastContext';
 import { useConfirm } from '../../lib/ConfirmContext';
 import { formatDate } from '../../lib/format';
 
+const ENTRETIEN_STATUTS = ['entretien_planifie', 'entretien_realise'];
+
 export default function CandidatDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [candidat, setCandidat] = useState(null);
   const [tab, setTab] = useState('profil');
   const [editOpen, setEditOpen] = useState(false);
@@ -26,9 +29,11 @@ export default function CandidatDetail() {
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [extraction, setExtraction] = useState(null);
+  const [entretienFocusId, setEntretienFocusId] = useState(null);
   const fileInput = useRef(null);
   const toast = useToast();
   const confirm = useConfirm();
+  const { getOptions } = usePickLists();
 
   const [error, setError] = useState(null);
   const load = () => {
@@ -37,8 +42,33 @@ export default function CandidatDetail() {
   };
   useEffect(() => { load(); }, [id]);
 
+  // Arrivée depuis la fiche d'un besoin après passage d'un positionnement au statut
+  // « Entretien planifié / réalisé » : on est automatiquement redirigé ici sur
+  // l'onglet Entretien, avec le positionnement concerné mis en avant.
+  useEffect(() => {
+    if (location.state?.tab) setTab(location.state.tab);
+    if (location.state?.focusPositionId) setEntretienFocusId(location.state.focusPositionId);
+  }, [location.state]);
+
+  const updatePositionStatus = async (p, statut) => {
+    await api.put(`/positionnements/${p.id}`, { statut });
+    toast('Statut du positionnement mis à jour.', 'success');
+    await load();
+    if (ENTRETIEN_STATUTS.includes(statut)) {
+      setTab('entretien');
+      setEntretienFocusId(p.id);
+    }
+  };
+
   if (error) return <EmptyState title="Impossible de charger le candidat" description={error} />;
   if (!candidat) return <Loading />;
+
+  // Positionnements concernés par un entretien : statut actuel « entretien
+  // planifié/réalisé », ou ayant déjà une date/heure d'entretien renseignée
+  // (conservés visibles même après un changement de statut ultérieur).
+  const entretiens = candidat.positionnements.filter(
+    (p) => ENTRETIEN_STATUTS.includes(p.statut) || p.date_entretien || p.heure_entretien
+  );
 
   const archive = async () => {
     if (!(await confirm({ title: 'Archiver ce candidat ?', message: `${candidat.prenom} ${candidat.nom} sera archivé.`, confirmLabel: 'Archiver' }))) return;
@@ -152,6 +182,7 @@ export default function CandidatDetail() {
         <div className="flex border-b border-slate2-100">
           <TabBtn active={tab === 'profil'} onClick={() => setTab('profil')}>CV</TabBtn>
           <TabBtn active={tab === 'positionnements'} onClick={() => setTab('positionnements')}>Positionnements ({candidat.positionnements.length})</TabBtn>
+          <TabBtn active={tab === 'entretien'} onClick={() => setTab('entretien')}>Entretiens ({entretiens.length})</TabBtn>
         </div>
 
         {tab === 'profil' && (
@@ -206,16 +237,40 @@ export default function CandidatDetail() {
             ) : (
               <div className="space-y-2">
                 {candidat.positionnements.map((p) => (
-                  <Link key={p.id} to={`/besoins/${p.besoin_id}`} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate2-50 border border-slate2-100">
-                    <div>
-                      <p className="text-sm font-medium text-slate2-800">{p.besoin_titre}</p>
+                  <div key={p.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate2-50 border border-slate2-100">
+                    <Link to={`/besoins/${p.besoin_id}`} className="min-w-0">
+                      <p className="text-sm font-medium text-slate2-800 truncate">{p.besoin_titre}</p>
                       <p className="text-xs text-slate2-400">{p.entreprise_nom} — {p.besoin_reference} — {formatDate(p.date_positionnement)}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
+                    </Link>
+                    <div className="flex items-center gap-2 shrink-0">
                       {p.score_compatibilite !== null && <span className="text-xs font-semibold text-brand">{Math.round(p.score_compatibilite)}%</span>}
-                      <StatusBadge category="positionnement_status" value={p.statut} small />
+                      <select
+                        className="input !py-1 !text-xs w-auto"
+                        value={p.statut}
+                        onChange={(e) => updatePositionStatus(p, e.target.value)}
+                      >
+                        {getOptions('positionnement_status').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
                     </div>
-                  </Link>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'entretien' && (
+          <div className="p-6">
+            {entretiens.length === 0 ? (
+              <EmptyState
+                icon={CalendarClock}
+                title="Aucun entretien"
+                description="Passez un positionnement au statut « Entretien planifié » ou « Entretien réalisé » pour renseigner une date et une heure ici."
+              />
+            ) : (
+              <div className="space-y-3">
+                {entretiens.map((p) => (
+                  <EntretienCard key={p.id} positionnement={p} focused={p.id === entretienFocusId} onSaved={load} />
                 ))}
               </div>
             )}
@@ -340,6 +395,46 @@ function PositionnerModal({ open, candidatId, candidatLabel, onClose, onSaved })
         <button className="btn btn-primary" disabled={saving} onClick={submit}>{saving ? 'Enregistrement...' : 'Confirmer le positionnement'}</button>
       </div>
     </Modal>
+  );
+}
+
+function EntretienCard({ positionnement: p, focused, onSaved }) {
+  const [date, setDate] = useState(p.date_entretien || '');
+  const [heure, setHeure] = useState(p.heure_entretien || '');
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (focused) ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [focused]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.put(`/positionnements/${p.id}`, { date_entretien: date || null, heure_entretien: heure || null });
+      toast('Entretien enregistré.', 'success');
+      onSaved();
+    } catch (err) { toast(err.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div ref={ref} className={`border rounded-xl p-4 transition-colors ${focused ? 'border-brand bg-brand-50' : 'border-slate2-100'}`}>
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <Link to={`/besoins/${p.besoin_id}`} className="text-sm font-medium text-slate2-800 hover:text-brand">
+          {p.besoin_titre} <span className="text-slate2-400 font-normal">— {p.entreprise_nom}</span>
+        </Link>
+        <StatusBadge category="positionnement_status" value={p.statut} small />
+      </div>
+      <div className="grid sm:grid-cols-2 gap-x-4">
+        <Field label="Date de l'entretien"><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+        <Field label="Heure de l'entretien"><input type="time" className="input" value={heure} onChange={(e) => setHeure(e.target.value)} /></Field>
+      </div>
+      <div className="flex justify-end mt-2">
+        <button className="btn btn-primary !py-1.5 !text-xs" disabled={saving} onClick={save}>{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
+      </div>
+    </div>
   );
 }
 
