@@ -18,7 +18,7 @@ router.post('/contacts/:contactId/echanges', async (req, res, next) => {
     if (!contact) return res.status(404).json({ error: 'Contact introuvable' });
     const b = req.body;
     const dh = crypto.createHash('md5').update(`manual|${Date.now()}|${Math.random()}`).digest('hex');
-    const dateEchange = b.date_echange || new Date().toISOString().slice(0, 10);
+    const dateEchange = b.date_echange || new Date().toISOString().slice(0, 16);
     const row = await dbGet(`
       INSERT INTO echanges (
         contact_id, entreprise_id, date_echange, date_approximative, type, objet, compte_rendu,
