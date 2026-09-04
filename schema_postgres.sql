@@ -217,6 +217,80 @@ CREATE TABLE IF NOT EXISTS import_reports (
 );
 
 -- ==========================================================================
+-- Prospection e-mail (envoi depuis Gmail via OAuth 2.0)
+-- ==========================================================================
+-- Compte Gmail connecté (une seule ligne : admin unique). Les tokens sont
+-- chiffrés (AES-256-GCM) avant écriture par server/services/gmail.js —
+-- jamais stockés ni exposés en clair, et jamais renvoyés au navigateur.
+CREATE TABLE IF NOT EXISTS gmail_connections (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  email TEXT NOT NULL,
+  refresh_token_encrypted TEXT NOT NULL,
+  access_token_encrypted TEXT,
+  access_token_expires_at TIMESTAMPTZ,
+  scope TEXT,
+  connected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS email_templates (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  nom TEXT NOT NULL,
+  objet TEXT NOT NULL DEFAULT '',
+  contenu TEXT NOT NULL DEFAULT '',
+  actif BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS email_campaigns (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  template_id BIGINT REFERENCES email_templates(id) ON DELETE SET NULL,
+  statut TEXT NOT NULL DEFAULT 'brouillon',
+  mode TEXT NOT NULL DEFAULT 'envoi_direct',
+  delai_secondes INTEGER NOT NULL DEFAULT 30,
+  limite_quotidienne INTEGER,
+  total_destinataires INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  started_at TIMESTAMPTZ,
+  finished_at TIMESTAMPTZ,
+  cancelled_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Une ligne par destinataire : c'est la table qui alimente à la fois
+-- l'historique sur la fiche prospect et la page "Envois d'e-mails".
+CREATE TABLE IF NOT EXISTS email_sends (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  campaign_id BIGINT REFERENCES email_campaigns(id) ON DELETE SET NULL,
+  contact_id BIGINT REFERENCES contacts(id) ON DELETE SET NULL,
+  entreprise_id BIGINT REFERENCES entreprises(id) ON DELETE SET NULL,
+  template_id BIGINT REFERENCES email_templates(id) ON DELETE SET NULL,
+  destinataire_email TEXT NOT NULL,
+  expediteur_email TEXT,
+  objet TEXT,
+  contenu TEXT,
+  statut TEXT NOT NULL DEFAULT 'programme',
+  gmail_message_id TEXT,
+  gmail_draft_id TEXT,
+  erreur TEXT,
+  envoye_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_email_sends_campaign ON email_sends(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_email_sends_contact ON email_sends(contact_id);
+CREATE INDEX IF NOT EXISTS idx_email_sends_entreprise ON email_sends(entreprise_id);
+CREATE INDEX IF NOT EXISTS idx_email_sends_statut ON email_sends(statut);
+CREATE INDEX IF NOT EXISTS idx_email_sends_envoye_at ON email_sends(envoye_at);
+
+-- Désinscription : un contact opt-out est automatiquement exclu de toute
+-- sélection/envoi (server/routes/emailCampaigns.js le revérifie toujours
+-- côté serveur, même si le contact avait été coché avant de se désinscrire).
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email_opt_out BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email_opt_out_at TIMESTAMPTZ;
+
+-- ==========================================================================
 -- Row Level Security : refus total par défaut, accès complet pour tout
 -- utilisateur authentifié (le seul compte autorisé sera celui de l'admin,
 -- l'inscription publique étant désactivée côté Supabase Auth).
@@ -228,7 +302,8 @@ BEGIN
   FOR t IN SELECT unnest(ARRAY[
     'pick_lists','entreprises','contacts','echanges','technologies',
     'entreprise_technologies','candidats','candidat_technologies','cvs',
-    'besoins','besoin_technologies','positionnements','import_reports'
+    'besoins','besoin_technologies','positionnements','import_reports',
+    'gmail_connections','email_templates','email_campaigns','email_sends'
   ])
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
