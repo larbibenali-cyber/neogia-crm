@@ -8,11 +8,12 @@ const { dbGet, dbRun } = require('../../db/pg');
 const gmailService = require('../services/gmail');
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 5 } });
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_TOTAL_ATTACHMENTS_BYTES = 20 * 1024 * 1024;
 
-router.post('/contacts/:contactId/send-email', upload.single('attachment'), async (req, res, next) => {
+router.post('/contacts/:contactId/send-email', upload.array('attachments', 5), async (req, res, next) => {
   try {
     const contact = await dbGet(`
       SELECT c.*, e.nom AS entreprise_nom FROM contacts c JOIN entreprises e ON e.id = c.entreprise_id WHERE c.id = ?
@@ -30,6 +31,12 @@ router.post('/contacts/:contactId/send-email', upload.single('attachment'), asyn
     if (!subject || !subject.trim()) return res.status(400).json({ error: "L'objet est requis." });
     if (!body || !body.trim()) return res.status(400).json({ error: 'Le contenu est requis.' });
 
+    const files = req.files || [];
+    const totalSize = files.reduce((s, f) => s + f.size, 0);
+    if (totalSize > MAX_TOTAL_ATTACHMENTS_BYTES) {
+      return res.status(400).json({ error: 'Taille totale des pièces jointes trop importante (20 Mo maximum au total).' });
+    }
+
     const connection = await gmailService.getConnection();
     if (!connection) {
       const err = new Error('Aucun compte Gmail connecté. Connectez-le depuis Paramètres avant d\'envoyer un e-mail.');
@@ -37,13 +44,11 @@ router.post('/contacts/:contactId/send-email', upload.single('attachment'), asyn
       throw err;
     }
 
-    const attachment = req.file
-      ? { filename: req.file.originalname, mimeType: req.file.mimetype, buffer: req.file.buffer }
-      : null;
+    const attachments = files.map((f) => ({ filename: f.originalname, mimeType: f.mimetype, buffer: f.buffer }));
 
     let sendResult;
     try {
-      sendResult = await gmailService.sendMessage({ to: contact.email, subject, body, attachment });
+      sendResult = await gmailService.sendMessage({ to: contact.email, subject, body, attachments });
     } catch (err) {
       // On garde une trace de l'échec dans l'historique des envois, mais on
       // NE crée PAS d'échange : rien n'est réellement parti.
