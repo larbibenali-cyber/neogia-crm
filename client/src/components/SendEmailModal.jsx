@@ -7,25 +7,28 @@ import { useConfirm } from '../lib/ConfirmContext';
 import { resolveTemplateVars } from '../pages/EmailTemplates';
 
 const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+const MAX_TOTAL_ATTACHMENTS_BYTES = 20 * 1024 * 1024;
+const MAX_ATTACHMENTS = 5;
 
 // Envoi individuel d'un e-mail de prospection à UN contact, depuis sa fiche.
 // Étapes dans une seule modale : choix du modèle -> objet/contenu
-// pré-remplis mais librement modifiables -> pièce jointe optionnelle ->
-// confirmation explicite avant l'envoi réel (rien ne part automatiquement).
+// pré-remplis mais librement modifiables -> pièces jointes optionnelles
+// (plusieurs) -> confirmation explicite avant l'envoi réel (rien ne part
+// automatiquement).
 export default function SendEmailModal({ open, onClose, contact, onSent }) {
   const [templates, setTemplates] = useState(null);
   const [signature, setSignature] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
-  const [attachment, setAttachment] = useState(null);
+  const [attachments, setAttachments] = useState([]);
   const [sending, setSending] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
 
   useEffect(() => {
     if (!open) return;
-    setTemplateId(''); setSubject(''); setBody(''); setAttachment(null); setTemplates(null);
+    setTemplateId(''); setSubject(''); setBody(''); setAttachments([]); setTemplates(null);
     Promise.all([
       api.get('/email-templates?actif=true'),
       api.get('/settings/signature').catch(() => ({ value: '' })),
@@ -43,14 +46,30 @@ export default function SendEmailModal({ open, onClose, contact, onSent }) {
     setBody(resolveTemplateVars(t.contenu, { contact, signature }));
   };
 
-  const pickFile = (file) => {
-    if (!file) { setAttachment(null); return; }
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      toast('Pièce jointe trop volumineuse (15 Mo maximum).', 'error');
-      return;
+  const addFiles = (fileList) => {
+    const incoming = Array.from(fileList || []);
+    if (!incoming.length) return;
+    const next = [...attachments];
+    for (const file of incoming) {
+      if (next.length >= MAX_ATTACHMENTS) {
+        toast(`Maximum ${MAX_ATTACHMENTS} pièces jointes.`, 'error');
+        break;
+      }
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        toast(`« ${file.name} » est trop volumineux (15 Mo maximum par fichier).`, 'error');
+        continue;
+      }
+      const total = next.reduce((s, f) => s + f.size, 0) + file.size;
+      if (total > MAX_TOTAL_ATTACHMENTS_BYTES) {
+        toast('Taille totale des pièces jointes trop importante (20 Mo maximum au total).', 'error');
+        continue;
+      }
+      next.push(file);
     }
-    setAttachment(file);
+    setAttachments(next);
   };
+
+  const removeFile = (idx) => setAttachments((prev) => prev.filter((_, i) => i !== idx));
 
   const submit = async () => {
     if (!subject.trim()) return toast("L'objet est requis.", 'error');
@@ -68,7 +87,7 @@ export default function SendEmailModal({ open, onClose, contact, onSent }) {
       fd.append('subject', subject);
       fd.append('body', body);
       if (templateId) fd.append('template_id', templateId);
-      if (attachment) fd.append('attachment', attachment);
+      attachments.forEach((file) => fd.append('attachments', file));
       await api.post(`/contacts/${contact.id}/send-email`, fd);
       toast('E-mail envoyé.', 'success');
       onSent();
@@ -106,18 +125,21 @@ export default function SendEmailModal({ open, onClose, contact, onSent }) {
         />
       </Field>
 
-      <Field label="Pièce jointe (facultatif)">
-        {attachment ? (
-          <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-slate2-200 text-sm">
-            <span className="flex items-center gap-2 text-slate2-700 truncate"><Paperclip size={14} /> {attachment.name} ({Math.round(attachment.size / 1024)} Ko)</span>
-            <button className="btn btn-ghost !px-2 !py-1 text-red-500" onClick={() => setAttachment(null)}><X size={14} /></button>
-          </div>
-        ) : (
-          <label className="btn btn-secondary cursor-pointer w-fit">
-            <Paperclip size={14} /> Joindre un fichier
-            <input type="file" hidden onChange={(e) => pickFile(e.target.files[0])} />
-          </label>
-        )}
+      <Field label="Pièces jointes (facultatif)" hint={`Jusqu'à ${MAX_ATTACHMENTS} fichiers, 15 Mo max par fichier.`}>
+        <div className="space-y-2">
+          {attachments.map((file, idx) => (
+            <div key={idx} className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-slate2-200 text-sm">
+              <span className="flex items-center gap-2 text-slate2-700 truncate"><Paperclip size={14} /> {file.name} ({Math.round(file.size / 1024)} Ko)</span>
+              <button className="btn btn-ghost !px-2 !py-1 text-red-500" onClick={() => removeFile(idx)}><X size={14} /></button>
+            </div>
+          ))}
+          {attachments.length < MAX_ATTACHMENTS && (
+            <label className="btn btn-secondary cursor-pointer w-fit">
+              <Paperclip size={14} /> Joindre un fichier
+              <input type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+            </label>
+          )}
+        </div>
       </Field>
 
       <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate2-100">
