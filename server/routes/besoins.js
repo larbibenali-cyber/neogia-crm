@@ -54,12 +54,12 @@ router.get('/', async (req, res, next) => {
     if (search) { where.push(`(b.titre ILIKE @s OR b.reference ILIKE @s OR b.description_contexte ILIKE @s)`); params.s = `%${search}%`; }
     if (statut) { where.push(`b.statut = @statut`); params.statut = statut; }
     // `groupe`/`statut_synthese` : filtre sur le statut normalisé affiché dans le
-    // widget "Besoins par statut" du tableau de bord (À venir / En cours / Perdu / ...).
-    // Valeur spéciale "ouverts" = À venir + En cours (utilisée par le compteur
+    // widget "Besoins par statut" du tableau de bord (À venir / Besoin détecté / Perdu / ...).
+    // Valeur spéciale "ouverts" = À venir + Besoin détecté (utilisée par le compteur
     // "Besoins ouverts" du tableau de bord).
     const groupeFilter = groupe || statut_synthese;
     if (groupeFilter === 'ouverts') {
-      where.push(`b.statut_synthese IN ('À venir', 'En cours')`);
+      where.push(`b.statut_synthese IN ('À venir', 'Besoin détecté')`);
     } else if (groupeFilter) {
       where.push(`b.statut_synthese = @groupe`); params.groupe = groupeFilter;
     }
