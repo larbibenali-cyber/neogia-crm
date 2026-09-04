@@ -158,12 +158,14 @@ function wrapBase64(b64) {
 }
 
 // Construit un message RFC 2822 encodé en base64url, tel qu'attendu par
-// l'API Gmail (users.messages.send). Avec pièce jointe, le message devient
-// multipart/mixed (corps texte + pièce jointe encodée en base64).
-function buildRawMessage({ from, to, subject, body, attachment }) {
+// l'API Gmail (users.messages.send). Avec pièces jointes, le message devient
+// multipart/mixed (corps texte + une partie par pièce jointe, encodée en
+// base64).
+function buildRawMessage({ from, to, subject, body, attachments }) {
   const subjectEncoded = `=?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`;
+  const files = attachments || [];
 
-  if (!attachment) {
+  if (files.length === 0) {
     const lines = [
       `From: ${from}`,
       `To: ${to}`,
@@ -178,7 +180,6 @@ function buildRawMessage({ from, to, subject, body, attachment }) {
   }
 
   const boundary = `neogia_${crypto.randomBytes(12).toString('hex')}`;
-  const safeFilename = attachment.filename.replace(/"/g, "'");
   const lines = [
     `From: ${from}`,
     `To: ${to}`,
@@ -192,24 +193,29 @@ function buildRawMessage({ from, to, subject, body, attachment }) {
     '',
     body,
     '',
-    `--${boundary}`,
-    `Content-Type: ${attachment.mimeType || 'application/octet-stream'}; name="${safeFilename}"`,
-    'Content-Transfer-Encoding: base64',
-    `Content-Disposition: attachment; filename="${safeFilename}"`,
-    '',
-    wrapBase64(attachment.buffer.toString('base64')),
-    '',
-    `--${boundary}--`,
   ];
+  for (const attachment of files) {
+    const safeFilename = attachment.filename.replace(/"/g, "'");
+    lines.push(
+      `--${boundary}`,
+      `Content-Type: ${attachment.mimeType || 'application/octet-stream'}; name="${safeFilename}"`,
+      'Content-Transfer-Encoding: base64',
+      `Content-Disposition: attachment; filename="${safeFilename}"`,
+      '',
+      wrapBase64(attachment.buffer.toString('base64')),
+      '',
+    );
+  }
+  lines.push(`--${boundary}--`);
   return toBase64Url(lines.join('\r\n'));
 }
 
 // Envoie réellement l'e-mail depuis le compte Gmail connecté (users.messages.send).
-// attachment (optionnel) : { filename, mimeType, buffer }.
-async function sendMessage({ to, subject, body, attachment }) {
+// attachments (optionnel) : [{ filename, mimeType, buffer }, ...].
+async function sendMessage({ to, subject, body, attachments }) {
   const { client, email } = await getAuthenticatedClient();
   const gmail = google.gmail({ version: 'v1', auth: client });
-  const raw = buildRawMessage({ from: email, to, subject, body, attachment });
+  const raw = buildRawMessage({ from: email, to, subject, body, attachments });
   const { data } = await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
   return { messageId: data.id, from: email };
 }
