@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Building2, UserSquare2, Briefcase, BarChart3, Plus, MessageSquarePlus,
+  Building2, UserSquare2, Briefcase, BarChart3, Plus,
   UserPlus, FilePlus2, Target, Clock, TrendingUp, ArrowRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { Loading } from '../components/ui';
+import { Loading, Modal } from '../components/ui';
 import StatusBadge from '../components/StatusBadge';
 import { timeAgo, formatDate } from '../lib/format';
 
@@ -26,7 +26,10 @@ function StatCard({ icon: Icon, label, value, color, onClick }) {
   );
 }
 
-function ActivityBarChart({ data }) {
+// Diagramme en bâtons cliquable : chaque barre ouvre (via onBarClick) la liste
+// détaillée des éléments qui la composent — même tableau que celui utilisé pour
+// calculer sa valeur, donc toujours cohérent avec le nombre affiché.
+function ActivityBarChart({ data, onBarClick }) {
   const BAR_H = 120;
   const max = Math.max(1, ...data.map((d) => d.value));
   const moisLabel = new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
@@ -38,17 +41,22 @@ function ActivityBarChart({ data }) {
         </h2>
         <span className="text-xs text-slate2-400 capitalize">{moisLabel}</span>
       </div>
-      <p className="text-xs text-slate2-500 mb-6">Depuis le 1er du mois en cours</p>
+      <p className="text-xs text-slate2-500 mb-6">Depuis le 1er du mois en cours — cliquez sur une barre pour voir le détail</p>
       <div className="flex items-end justify-around gap-8 px-2 pb-3 border-b border-slate2-200">
         {data.map((d) => (
-          <div key={d.key} className="flex flex-col items-center flex-1">
+          <button
+            key={d.key}
+            type="button"
+            onClick={() => onBarClick(d)}
+            className="flex flex-col items-center flex-1 rounded-lg hover:bg-brand-50 transition-colors py-1 cursor-pointer"
+            title={`Voir le détail : ${d.label}`}
+          >
             <span className="text-lg font-heading font-semibold text-slate2-900 mb-1.5">{d.value}</span>
             <div
               className="w-full max-w-[64px] rounded-t-lg transition-all duration-500"
               style={{ height: Math.max(6, Math.round((d.value / max) * BAR_H)), background: d.color }}
-              title={`${d.label} : ${d.value}`}
             />
-          </div>
+          </button>
         ))}
       </div>
       <div className="flex justify-around gap-8 px-2 mt-2.5">
@@ -57,6 +65,34 @@ function ActivityBarChart({ data }) {
         ))}
       </div>
     </div>
+  );
+}
+
+// Liste de détail affichée dans une modale quand on clique sur une barre du
+// diagramme d'activité — chaque ligne ouvre la fiche complète correspondante.
+function DrillDownModal({ open, onClose, title, items, renderItem }) {
+  return (
+    <Modal open={open} onClose={onClose} title={title}>
+      {(!items || items.length === 0) && <p className="text-sm text-slate2-400">Aucun élément ce mois-ci.</p>}
+      {items && items.length > 0 && (
+        <ul className="divide-y divide-slate2-100 max-h-[60vh] overflow-y-auto -mx-1">
+          {items.map((item, i) => (
+            <li key={item.id || i} className="py-1">{renderItem(item)}</li>
+          ))}
+        </ul>
+      )}
+    </Modal>
+  );
+}
+
+function DrillDownRow({ to, primary, secondary }) {
+  return (
+    <Link to={to} className="flex items-center justify-between gap-3 group hover:bg-brand-50 -mx-1 px-3 py-2 rounded-lg transition-colors">
+      <span className="text-sm text-slate2-800 group-hover:text-brand truncate">
+        {primary} {secondary && <span className="text-slate2-400 font-normal">— {secondary}</span>}
+      </span>
+      <ArrowRight size={14} className="text-slate2-300 group-hover:text-brand shrink-0" />
+    </Link>
   );
 }
 
@@ -74,6 +110,7 @@ function ShortcutButton({ icon: Icon, label, onClick }) {
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [drillDown, setDrillDown] = useState(null); // { key, label } | null
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -82,13 +119,31 @@ export default function Dashboard() {
 
   if (error) return <div className="card p-8 text-center text-slate2-500">{error}</div>;
   if (!data) return <Loading />;
-  const { totaux, besoins_en_cours, derniers_echanges, dernieres_fiches, besoins_par_statut, besoins_prioritaires, candidats_positionnes_recemment, activite_mois } = data;
+  const {
+    totaux, besoins_en_cours, derniers_echanges, dernieres_fiches, besoins_par_statut,
+    besoins_prioritaires, candidats_positionnes_recemment, activite_mois, activite_mois_details,
+  } = data;
   const maxStatut = Math.max(1, ...besoins_par_statut.map((b) => b.n));
   const activiteMoisData = [
-    { key: 'besoins', label: 'Besoins détectés', value: activite_mois.besoins_detectes, color: '#B45309' },
-    { key: 'positionnes', label: 'Candidats positionnés', value: activite_mois.candidats_positionnes, color: '#047857' },
-    { key: 'entretiens', label: 'Entretiens réalisés', value: activite_mois.entretiens_realises, color: '#4527EA' },
+    { key: 'besoins_detectes', label: 'Besoins détectés', value: activite_mois.besoins_detectes, color: '#B45309' },
+    { key: 'candidats_positionnes', label: 'Candidats positionnés', value: activite_mois.candidats_positionnes, color: '#047857' },
+    { key: 'entretiens_realises', label: 'Entretiens réalisés', value: activite_mois.entretiens_realises, color: '#4527EA' },
   ];
+
+  const drillDownItems = drillDown ? (activite_mois_details?.[drillDown.key] || []) : [];
+  const renderDrillDownItem = (item) => {
+    if (drillDown?.key === 'besoins_detectes') {
+      return <DrillDownRow to={`/besoins/${item.id}`} primary={item.titre} secondary={item.entreprise_nom} />;
+    }
+    // candidats_positionnes / entretiens_realises : même structure (candidat -> besoin)
+    return (
+      <DrillDownRow
+        to={`/besoins/${item.besoin_id}`}
+        primary={`${item.candidat_prenom} ${item.candidat_nom}`}
+        secondary={item.besoin_titre}
+      />
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -106,9 +161,8 @@ export default function Dashboard() {
 
       <div>
         <h2 className="text-sm font-semibold text-slate2-500 uppercase tracking-wide mb-3">Actions rapides</h2>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <ShortcutButton icon={Plus} label="Nouveau client / contact" onClick={() => navigate('/clients?create=1')} />
-          <ShortcutButton icon={MessageSquarePlus} label="Ajouter un échange" onClick={() => navigate('/clients')} />
           <ShortcutButton icon={UserPlus} label="Nouveau candidat" onClick={() => navigate('/candidats?create=1')} />
           <ShortcutButton icon={FilePlus2} label="Nouveau besoin" onClick={() => navigate('/besoins?create=1')} />
           <ShortcutButton icon={Target} label="Positionner un candidat" onClick={() => navigate('/besoins')} />
@@ -117,8 +171,8 @@ export default function Dashboard() {
 
       <div className="grid lg:grid-cols-2 gap-5">
         <div className="card p-5">
-          <h2 className="font-heading font-semibold text-slate2-900 mb-4 flex items-center gap-2"><Briefcase size={18} className="text-brand" /> Besoins en cours</h2>
-          {besoins_en_cours.length === 0 && <p className="text-sm text-slate2-400">Aucun besoin en cours.</p>}
+          <h2 className="font-heading font-semibold text-slate2-900 mb-4 flex items-center gap-2"><Briefcase size={18} className="text-brand" /> Besoins détectés</h2>
+          {besoins_en_cours.length === 0 && <p className="text-sm text-slate2-400">Aucun besoin détecté.</p>}
           <ul className="divide-y divide-slate2-100">
             {besoins_en_cours.map((b) => (
               <li key={b.id}>
@@ -157,7 +211,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <ActivityBarChart data={activiteMoisData} />
+      <ActivityBarChart data={activiteMoisData} onBarClick={(d) => setDrillDown({ key: d.key, label: d.label })} />
 
       <div className="grid lg:grid-cols-3 gap-5">
         <div className="card p-5 lg:col-span-2">
@@ -250,6 +304,14 @@ export default function Dashboard() {
           {dernieres_fiches.length === 0 && <p className="text-sm text-slate2-400">Aucune fiche.</p>}
         </ul>
       </div>
+
+      <DrillDownModal
+        open={!!drillDown}
+        onClose={() => setDrillDown(null)}
+        title={drillDown ? `${drillDown.label} — ce mois-ci` : ''}
+        items={drillDownItems}
+        renderItem={renderDrillDownItem}
+      />
     </div>
   );
 }
