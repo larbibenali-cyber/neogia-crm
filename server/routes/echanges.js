@@ -5,6 +5,21 @@ const { generateReference } = require('../utils');
 
 const router = express.Router();
 
+// Journal de tous les échanges (toutes entreprises/contacts confondus), pour le
+// récapitulatif "Échanges" du menu principal — regroupé par jour côté client.
+router.get('/echanges', async (req, res, next) => {
+  try {
+    const rows = await dbAll(`
+      SELECT ech.*, c.nom AS contact_nom, c.prenom AS contact_prenom, e.nom AS entreprise_nom
+      FROM echanges ech
+      JOIN contacts c ON c.id = ech.contact_id
+      JOIN entreprises e ON e.id = ech.entreprise_id
+      ORDER BY (ech.date_echange IS NULL) ASC, COALESCE(ech.date_echange, ech.created_at::text) DESC
+    `);
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
 router.get('/contacts/:contactId/echanges', async (req, res, next) => {
   try {
     const rows = await dbAll(`SELECT * FROM echanges WHERE contact_id = ? ORDER BY (date_echange IS NULL) ASC, COALESCE(date_echange, created_at::text) DESC`, [req.params.contactId]);
