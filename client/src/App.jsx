@@ -12,6 +12,7 @@ import CandidatsList from './pages/Candidats/CandidatsList';
 import CandidatDetail from './pages/Candidats/CandidatDetail';
 import BesoinsList from './pages/Besoins/BesoinsList';
 import BesoinDetail from './pages/Besoins/BesoinDetail';
+import Echanges from './pages/Echanges';
 import Parametres from './pages/Parametres';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
@@ -59,6 +60,7 @@ function AppShell() {
             <Route path="/candidats/:id" element={<CandidatDetail />} />
             <Route path="/besoins" element={<BesoinsList />} />
             <Route path="/besoins/:id" element={<BesoinDetail />} />
+            <Route path="/echanges" element={<Echanges />} />
             <Route path="/parametres" element={<Parametres />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
