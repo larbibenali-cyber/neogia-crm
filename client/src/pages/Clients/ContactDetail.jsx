@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
-  Mail, Phone, Smartphone, MapPin, Building2, ArrowLeft, Pencil, Archive, Trash2, Plus,
+  Mail, Phone, Smartphone, MapPin, Building2, ArrowLeft, Pencil, Archive, Trash2, Plus, Send,
   Phone as PhoneIcon, Mail as MailIcon, Linkedin, Users, Video, MessageCircle, Briefcase,
 } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -11,12 +11,14 @@ import TechCloud from '../../components/TechCloud';
 import ContactFormModal from '../../components/ContactFormModal';
 import EchangeFormModal from '../../components/EchangeFormModal';
 import BesoinFormModal from '../../components/BesoinFormModal';
+import SendEmailModal from '../../components/SendEmailModal';
 import { usePickLists } from '../../lib/PickListsContext';
 import { useToast } from '../../lib/ToastContext';
 import { useConfirm } from '../../lib/ConfirmContext';
 import { formatDate, timeAgo, formatPhoneFR, phoneHref } from '../../lib/format';
 
 const TYPE_ICONS = { appel: PhoneIcon, email: MailIcon, linkedin: Linkedin, reunion: Users, visio: Video, autre: MessageCircle };
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function ContactDetail() {
   const { id } = useParams();
@@ -26,6 +28,7 @@ export default function ContactDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [echangeModal, setEchangeModal] = useState({ open: false, echange: null });
   const [besoinModal, setBesoinModal] = useState({ open: false, defaults: null });
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
   const { getLabel } = usePickLists();
   const toast = useToast();
   const confirm = useConfirm();
@@ -87,6 +90,18 @@ export default function ContactDetail() {
           </div>
           <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
             <StatusBadge category="contact_status" value={contact.statut} />
+            <button
+              className="btn btn-secondary"
+              disabled={!contact.email || !EMAIL_RE.test(contact.email) || contact.email_opt_out}
+              title={
+                contact.email_opt_out ? 'Ce contact est désinscrit des e-mails de prospection.'
+                  : (!contact.email || !EMAIL_RE.test(contact.email)) ? "Aucune adresse e-mail valide pour ce contact."
+                  : "Envoyer un e-mail de prospection à ce contact"
+              }
+              onClick={() => setSendEmailOpen(true)}
+            >
+              <Send size={14} /> Envoyer un e-mail
+            </button>
             <button className="btn btn-secondary" onClick={() => setEditOpen(true)}><Pencil size={14} /> Modifier</button>
             <button className="btn btn-danger" onClick={archive}><Archive size={14} /> Archiver</button>
           </div>
@@ -219,6 +234,12 @@ export default function ContactDetail() {
         onClose={() => setBesoinModal({ open: false, defaults: null })}
         defaults={besoinModal.defaults}
         onSaved={(b) => navigate(`/besoins/${b.id}`)}
+      />
+      <SendEmailModal
+        open={sendEmailOpen}
+        onClose={() => setSendEmailOpen(false)}
+        contact={contact}
+        onSent={load}
       />
     </div>
   );
