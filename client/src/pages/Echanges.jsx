@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  History, Search, X, Building2, Plus,
+  History, Search, X, Building2,
   Phone as PhoneIcon, Mail as MailIcon, Linkedin, Users, Video, MessageCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { Loading, EmptyState, Modal } from '../components/ui';
+import { Loading, EmptyState } from '../components/ui';
 import { usePickLists } from '../lib/PickListsContext';
-import EchangeFormModal from '../components/EchangeFormModal';
+import { OBJET_PRESETS } from '../components/EchangeFormModal';
 
 const TYPE_ICONS = { appel: PhoneIcon, email: MailIcon, linkedin: Linkedin, reunion: Users, visio: Video, autre: MessageCircle };
 
@@ -49,79 +49,12 @@ function dayLabel(key) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-// Sélecteur de contact : première étape pour créer un échange depuis le
-// journal global (qui, contrairement à la fiche contact, n'a pas de contact
-// déjà déterminé) — recherche via l'API contacts, sélection ouvre ensuite
-// EchangeFormModal pour ce contact.
-function ContactPickerModal({ open, onClose, onPick }) {
-  const [q, setQ] = useState('');
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!open) { setQ(''); setResults([]); setLoading(false); }
-  }, [open]);
-
-  useEffect(() => {
-    if (!open || q.trim().length < 2) { setResults([]); return; }
-    setLoading(true);
-    const t = setTimeout(() => {
-      api.get(`/contacts?search=${encodeURIComponent(q.trim())}&pageSize=8`)
-        .then((d) => setResults(d.results || []))
-        .catch(() => setResults([]))
-        .finally(() => setLoading(false));
-    }, 250);
-    return () => clearTimeout(t);
-  }, [q, open]);
-
-  return (
-    <Modal open={open} onClose={onClose} title="Nouvel échange — choisir un contact">
-      <div className="relative mb-3">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate2-300" />
-        <input
-          autoFocus
-          className="input pl-9"
-          placeholder="Rechercher un contact (nom, entreprise, email...)"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-      </div>
-      {q.trim().length < 2 && (
-        <p className="text-sm text-slate2-400 py-4 text-center">Tapez au moins 2 caractères pour rechercher un contact.</p>
-      )}
-      {loading && <Loading label="Recherche..." />}
-      {!loading && q.trim().length >= 2 && results.length === 0 && (
-        <p className="text-sm text-slate2-400 py-4 text-center">Aucun contact trouvé.</p>
-      )}
-      {!loading && results.length > 0 && (
-        <ul className="divide-y divide-slate2-100">
-          {results.map((c) => (
-            <li key={c.id}>
-              <button
-                type="button"
-                className="w-full flex items-center justify-between gap-2 px-2 py-2.5 rounded-xl hover:bg-slate2-50 text-left"
-                onClick={() => onPick(c)}
-              >
-                <span className="text-sm font-medium text-slate2-800">{c.prenom} {c.nom}</span>
-                <span className="flex items-center gap-1 text-xs text-slate2-400 shrink-0">
-                  <Building2 size={11} /> {c.entreprise_nom}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Modal>
-  );
-}
-
 export default function Echanges() {
   const [echanges, setEchanges] = useState(null);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [type, setType] = useState('');
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [echangeModal, setEchangeModal] = useState({ open: false, contactId: null });
+  const [objet, setObjet] = useState('');
   const { getOptions, getLabel } = usePickLists();
 
   const load = useCallback(() => {
@@ -132,21 +65,21 @@ export default function Echanges() {
 
   useEffect(() => { load(); }, [load]);
 
-  const pickContact = (c) => {
-    setPickerOpen(false);
-    setEchangeModal({ open: true, contactId: c.id });
-  };
-
   const filtered = useMemo(() => {
     if (!echanges) return [];
     const q = search.trim().toLowerCase();
     return echanges.filter((e) => {
       if (type && e.type !== type) return false;
+      // Le filtre "Objet" retrouve les échanges déjà enregistrés sous cet objet
+      // (ex. "Rendez-vous") — comparaison insensible à la casse/aux espaces pour
+      // couvrir les échanges saisis avant l'ajout des presets ou légèrement
+      // différents (ex. "rendez-vous", "Rendez vous").
+      if (objet && (e.objet || '').trim().toLowerCase() !== objet.toLowerCase()) return false;
       if (!q) return true;
       const hay = `${e.contact_prenom} ${e.contact_nom} ${e.entreprise_nom} ${e.objet || ''} ${e.compte_rendu || ''}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [echanges, search, type]);
+  }, [echanges, search, type, objet]);
 
   const groups = useMemo(() => {
     const map = new Map();
@@ -163,18 +96,13 @@ export default function Echanges() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-heading font-semibold text-slate2-900 flex items-center gap-2">
-            <History size={22} className="text-brand" /> Journal des échanges
-          </h1>
-          <p className="text-slate2-500 text-sm mt-1">
-            {filtered.length} échange{filtered.length !== 1 ? 's' : ''}{(search || type) ? ' trouvé(s)' : ''} — récapitulatif jour par jour, toutes entreprises confondues
-          </p>
-        </div>
-        <button className="btn btn-primary shrink-0" onClick={() => setPickerOpen(true)}>
-          <Plus size={14} /> Nouvel échange
-        </button>
+      <div>
+        <h1 className="text-2xl font-heading font-semibold text-slate2-900 flex items-center gap-2">
+          <History size={22} className="text-brand" /> Journal des échanges
+        </h1>
+        <p className="text-slate2-500 text-sm mt-1">
+          {filtered.length} échange{filtered.length !== 1 ? 's' : ''}{(search || type || objet) ? ' trouvé(s)' : ''} — récapitulatif jour par jour, toutes entreprises confondues
+        </p>
       </div>
 
       <div className="card p-4">
@@ -192,8 +120,12 @@ export default function Echanges() {
             <option value="">Tous les types</option>
             {getOptions('echange_type').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
-          {(search || type) && (
-            <button className="btn btn-ghost text-red-500" onClick={() => { setSearch(''); setType(''); }}>
+          <select className="input w-auto" value={objet} onChange={(e) => setObjet(e.target.value)}>
+            <option value="">Tous les objets</option>
+            {OBJET_PRESETS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+          {(search || type || objet) && (
+            <button className="btn btn-ghost text-red-500" onClick={() => { setSearch(''); setType(''); setObjet(''); }}>
               <X size={14} /> Réinitialiser
             </button>
           )}
@@ -248,15 +180,6 @@ export default function Echanges() {
           </ul>
         </div>
       ))}
-
-      <ContactPickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={pickContact} />
-      <EchangeFormModal
-        open={echangeModal.open}
-        onClose={() => setEchangeModal({ open: false, contactId: null })}
-        onSaved={load}
-        contactId={echangeModal.contactId}
-        echange={null}
-      />
     </div>
   );
 }
