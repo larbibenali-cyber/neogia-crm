@@ -9,7 +9,7 @@ router.get('/', async (req, res, next) => {
     const totalContacts = (await dbGet('SELECT COUNT(*) c FROM contacts WHERE archived = false')).c;
     const totalCandidats = (await dbGet('SELECT COUNT(*) c FROM candidats WHERE archived = false')).c;
     const besoinsOuverts = (await dbGet(`
-      SELECT COUNT(*) c FROM besoins WHERE archived = false AND statut_synthese IN ('À venir', 'En cours')
+      SELECT COUNT(*) c FROM besoins WHERE archived = false AND statut_synthese IN ('À venir', 'Besoin détecté')
     `)).c;
 
     const today = new Date().toISOString().slice(0, 10);
@@ -17,14 +17,14 @@ router.get('/', async (req, res, next) => {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
 
-    // Besoins « en cours » (statut_synthese = 'En cours'), triés par degré d'urgence
+    // Besoins « détectés » (statut_synthese = 'Besoin détecté'), triés par degré d'urgence
     // décroissant (urgente > haute > normale > basse) puis par date de démarrage —
     // affichés sur le tableau de bord avec les plus urgents en premier.
     const besoinsEnCours = await dbAll(`
       SELECT b.*, e.nom as entreprise_nom,
         (SELECT COUNT(*)::int FROM positionnements p WHERE p.besoin_id = b.id) AS nb_candidats
       FROM besoins b JOIN entreprises e ON e.id = b.entreprise_id
-      WHERE b.archived = false AND b.statut_synthese = 'En cours'
+      WHERE b.archived = false AND b.statut_synthese = 'Besoin détecté'
       ORDER BY
         CASE b.priorite WHEN 'urgente' THEN 4 WHEN 'haute' THEN 3 WHEN 'normale' THEN 2 WHEN 'basse' THEN 1 ELSE 0 END DESC,
         b.date_demarrage ASC NULLS LAST,
@@ -43,18 +43,18 @@ router.get('/', async (req, res, next) => {
       JOIN entreprises e ON e.id = c.entreprise_id ORDER BY c.created_at DESC LIMIT 8
     `);
 
-    // Regroupement par statut normalisé (À venir / En cours / Perdu / Gagné / Clôturé) —
+    // Regroupement par statut normalisé (À venir / Besoin détecté / Perdu / Gagné / Clôturé) —
     // distinct du pick-list interne `statut`, aligné sur le statut réel importé des besoins.
     const besoinsParStatutRows = await dbAll(`
       SELECT statut_synthese AS groupe, COUNT(*)::int n FROM besoins WHERE archived = false GROUP BY statut_synthese
     `);
-    const ordreGroupes = ['En cours', 'À venir', 'Gagné', 'Perdu', 'Clôturé'];
+    const ordreGroupes = ['Besoin détecté', 'À venir', 'Gagné', 'Perdu', 'Clôturé'];
     const besoinsParStatut = ordreGroupes
       .map((g) => ({ groupe: g, n: besoinsParStatutRows.find((r) => r.groupe === g)?.n || 0 }))
       .filter((r) => r.n > 0);
 
     // "Besoins prioritaires" — un besoin apparaît une seule fois, classé sur le premier
-    // critère qu'il remplit dans l'ordre : 1) en cours, 2) échéance proche (<=14j),
+    // critère qu'il remplit dans l'ordre : 1) besoin détecté, 2) échéance proche (<=14j),
     // 3) sans candidat positionné, 4) en attente de retour client, 5) à venir.
     const besoinsPrioritaires = await dbAll(`
       WITH b AS (
@@ -66,11 +66,11 @@ router.get('/', async (req, res, next) => {
               AND p.statut IN ('cv_envoye', 'en_attente_retour', 'entretien_planifie', 'entretien_realise')
           ) AS attente_retour
         FROM besoins bb JOIN entreprises e ON e.id = bb.entreprise_id
-        WHERE bb.archived = false AND bb.statut_synthese IN ('À venir', 'En cours')
+        WHERE bb.archived = false AND bb.statut_synthese IN ('À venir', 'Besoin détecté')
       )
       SELECT *,
         CASE
-          WHEN statut_synthese = 'En cours' THEN 1
+          WHEN statut_synthese = 'Besoin détecté' THEN 1
           WHEN (date_demarrage IS NOT NULL AND date_demarrage BETWEEN @today AND @in14)
             OR (date_limite_reponse IS NOT NULL AND date_limite_reponse BETWEEN @today AND @in14) THEN 2
           WHEN nb_candidats = 0 THEN 3
@@ -78,7 +78,7 @@ router.get('/', async (req, res, next) => {
           ELSE 5
         END AS priorite_rang,
         CASE
-          WHEN statut_synthese = 'En cours' THEN 'Besoin en cours'
+          WHEN statut_synthese = 'Besoin détecté' THEN 'Besoin détecté'
           WHEN (date_demarrage IS NOT NULL AND date_demarrage BETWEEN @today AND @in14)
             OR (date_limite_reponse IS NOT NULL AND date_limite_reponse BETWEEN @today AND @in14) THEN 'Échéance proche'
           WHEN nb_candidats = 0 THEN 'Sans candidat positionné'
@@ -107,7 +107,7 @@ router.get('/', async (req, res, next) => {
     const besoinsSansCandidat = await dbAll(`
       SELECT b.id, b.titre, b.reference, e.nom as entreprise_nom FROM besoins b
       JOIN entreprises e ON e.id = b.entreprise_id
-      WHERE b.archived = false AND b.statut_synthese IN ('À venir', 'En cours')
+      WHERE b.archived = false AND b.statut_synthese IN ('À venir', 'Besoin détecté')
         AND NOT EXISTS (SELECT 1 FROM positionnements p WHERE p.besoin_id = b.id)
       LIMIT 10
     `);
@@ -125,16 +125,39 @@ router.get('/', async (req, res, next) => {
     // (positionnement_etapes.statut_apres), qui trace automatiquement tout changement
     // de statut, qu'il vienne du flux « Entretien planifié/réalisé » ou d'une mise à
     // jour manuelle.
-    const besoinsDetectesMois = (await dbGet(
-      `SELECT COUNT(*)::int c FROM besoins WHERE created_at >= @monthStart`, { monthStart }
-    )).c;
-    const candidatsPositionnesMois = (await dbGet(
-      `SELECT COUNT(*)::int c FROM positionnements WHERE created_at >= @monthStart`, { monthStart }
-    )).c;
-    const entretiensRealisesMois = (await dbGet(`
-      SELECT COUNT(DISTINCT positionnement_id)::int c FROM positionnement_etapes
-      WHERE statut_apres = 'entretien_realise' AND date_etape >= @monthStart
-    `, { monthStart })).c;
+    //
+    // On récupère ici les LIGNES détaillées (pas seulement le compte) pour permettre
+    // au diagramme du tableau de bord d'être cliquable : cliquer sur une barre ouvre
+    // la liste exacte des éléments qui la composent, chacun cliquable vers sa fiche
+    // complète. Le compte affiché (`activite_mois`) et la liste de détail
+    // (`activite_mois_details`) proviennent de la même requête, donc toujours cohérents.
+    const besoinsDetectesMoisRows = await dbAll(`
+      SELECT b.id, b.titre, b.reference, e.nom AS entreprise_nom
+      FROM besoins b JOIN entreprises e ON e.id = b.entreprise_id
+      WHERE b.created_at >= @monthStart
+      ORDER BY b.created_at DESC
+    `, { monthStart });
+
+    const candidatsPositionnesMoisRows = await dbAll(`
+      SELECT p.id, p.besoin_id, p.candidat_id, c.nom AS candidat_nom, c.prenom AS candidat_prenom, b.titre AS besoin_titre
+      FROM positionnements p JOIN candidats c ON c.id = p.candidat_id JOIN besoins b ON b.id = p.besoin_id
+      WHERE p.created_at >= @monthStart
+      ORDER BY p.created_at DESC
+    `, { monthStart });
+
+    const entretiensRealisesMoisRows = await dbAll(`
+      SELECT * FROM (
+        SELECT DISTINCT ON (pe.positionnement_id) pe.positionnement_id, p.besoin_id, p.candidat_id,
+          c.nom AS candidat_nom, c.prenom AS candidat_prenom, b.titre AS besoin_titre, pe.date_etape
+        FROM positionnement_etapes pe
+        JOIN positionnements p ON p.id = pe.positionnement_id
+        JOIN candidats c ON c.id = p.candidat_id
+        JOIN besoins b ON b.id = p.besoin_id
+        WHERE pe.statut_apres = 'entretien_realise' AND pe.date_etape >= @monthStart
+        ORDER BY pe.positionnement_id, pe.date_etape DESC
+      ) sub
+      ORDER BY date_etape DESC
+    `, { monthStart });
 
     res.json({
       totaux: { entreprises: totalEntreprises, contacts: totalContacts, candidats: totalCandidats, besoins_ouverts: besoinsOuverts },
@@ -151,9 +174,14 @@ router.get('/', async (req, res, next) => {
         fiches_incompletes: fichesIncompletes,
       },
       activite_mois: {
-        besoins_detectes: besoinsDetectesMois,
-        candidats_positionnes: candidatsPositionnesMois,
-        entretiens_realises: entretiensRealisesMois,
+        besoins_detectes: besoinsDetectesMoisRows.length,
+        candidats_positionnes: candidatsPositionnesMoisRows.length,
+        entretiens_realises: entretiensRealisesMoisRows.length,
+      },
+      activite_mois_details: {
+        besoins_detectes: besoinsDetectesMoisRows,
+        candidats_positionnes: candidatsPositionnesMoisRows,
+        entretiens_realises: entretiensRealisesMoisRows,
       },
     });
   } catch (err) { next(err); }
