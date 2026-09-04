@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, UserSquare2, Briefcase, Settings } from 'lucide-react';
+import { LayoutDashboard, Building2, UserSquare2, Briefcase, History, Settings } from 'lucide-react';
 import logo from '../assets/neogia-logo.png';
 
 const NAV = [
@@ -8,6 +8,7 @@ const NAV = [
   { to: '/clients', label: 'Clients', icon: Building2 },
   { to: '/candidats', label: 'Candidats', icon: UserSquare2 },
   { to: '/besoins', label: 'Besoins', icon: Briefcase },
+  { to: '/echanges', label: 'Échanges', icon: History },
 ];
 
 export default function Sidebar() {
