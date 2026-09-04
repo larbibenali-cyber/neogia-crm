@@ -61,7 +61,7 @@ export default function BesoinsList() {
       {filters.groupe && (
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 text-sm bg-brand-50 text-brand font-medium px-3 py-1.5 rounded-full">
-            Statut : {filters.groupe === 'ouverts' ? 'Ouverts (À venir + En cours)' : filters.groupe}
+            Statut : {filters.groupe === 'ouverts' ? 'Ouverts (À venir + Besoin détecté)' : filters.groupe}
             <button
               onClick={() => updateParam({ groupe: '' })}
               className="hover:bg-brand/10 rounded-full p-0.5 -mr-1"
