@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
-import { UploadCloud, Download, DatabaseBackup, Plus, Pencil } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { UploadCloud, Download, DatabaseBackup, Plus, Pencil, Mail, CheckCircle2, XCircle, FileText } from 'lucide-react';
 import { api, downloadFile } from '../lib/api';
 import { usePickLists } from '../lib/PickListsContext';
 import { useToast } from '../lib/ToastContext';
@@ -22,6 +23,21 @@ export default function Parametres() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [addCategory, setAddCategory] = useState(null);
+  const [params, setParams] = useSearchParams();
+
+  // Après le retour du flux OAuth Gmail (server/routes/gmailPublic.js
+  // redirige ici avec ?gmail=connected|error), on informe l'utilisateur puis
+  // on nettoie l'URL pour ne pas re-déclencher le toast à un rechargement.
+  useEffect(() => {
+    const status = params.get('gmail');
+    if (!status) return;
+    if (status === 'connected') toast(`Compte Gmail connecté (${params.get('email') || ''}).`, 'success');
+    else if (status === 'error') toast(`Connexion Gmail impossible : ${params.get('reason') || 'erreur inconnue'}.`, 'error');
+    const next = new URLSearchParams(params);
+    next.delete('gmail'); next.delete('email'); next.delete('reason');
+    setParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleRestore = async (file) => {
     if (!file) return;
@@ -45,6 +61,8 @@ export default function Parametres() {
         <h1 className="text-2xl font-heading font-semibold text-slate2-900">Paramètres</h1>
         <p className="text-slate2-500 text-sm mt-1">Import de données, sauvegardes et personnalisation des statuts.</p>
       </div>
+
+      <GmailConnectionCard />
 
       <div className="card p-6">
         <h2 className="font-heading font-semibold text-slate2-900 mb-1">Import Excel</h2>
@@ -124,6 +142,120 @@ function EditPickListModal({ item, onClose, onSave }) {
         </div>
       </div>
     </Modal>
+  );
+}
+
+// Carte "Prospection e-mail" : statut de connexion au compte Gmail
+// professionnel (connecter / déconnecter / reconnecter) + accès à la
+// rubrique Modèles d'e-mails. Le token lui-même n'est jamais renvoyé au
+// frontend — seuls l'adresse connectée et la date de connexion le sont.
+function GmailConnectionCard() {
+  const toast = useToast();
+  const [status, setStatus] = useState(null); // { connected, email, connectedAt } | null (chargement)
+  const [busy, setBusy] = useState(false);
+  const [signature, setSignature] = useState('');
+  const [signatureSaving, setSignatureSaving] = useState(false);
+
+  const load = () => {
+    api.get('/gmail/status')
+      .then(setStatus)
+      .catch((e) => toast(e.message, 'error'));
+  };
+  useEffect(() => {
+    load();
+    api.get('/settings/signature').then((s) => setSignature(s.value || '')).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const saveSignature = async () => {
+    setSignatureSaving(true);
+    try {
+      await api.put('/settings/signature', { value: signature });
+      toast('Signature enregistrée.', 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally { setSignatureSaving(false); }
+  };
+
+  const connect = async () => {
+    setBusy(true);
+    try {
+      const { url } = await api.get('/gmail/oauth/start');
+      // Navigation complète (pas une popup) : l'écran de consentement Google
+      // n'autorise pas toujours l'affichage en popup selon la configuration
+      // du compte, et ça reste plus simple/fiable sur mobile (PWA).
+      window.location.href = url;
+    } catch (err) {
+      toast(err.message, 'error');
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy(true);
+    try {
+      await api.post('/gmail/disconnect', {});
+      toast('Compte Gmail déconnecté.', 'success');
+      load();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="card p-6">
+      <h2 className="font-heading font-semibold text-slate2-900 mb-1">Prospection e-mail</h2>
+      <p className="text-sm text-slate2-500 mb-4">Connectez votre adresse Gmail professionnelle pour envoyer des e-mails de prospection depuis le CRM. Votre mot de passe Gmail n'est jamais demandé ni enregistré — seule une autorisation Google (OAuth) est utilisée, révocable à tout moment.</p>
+
+      {status === null && <p className="text-sm text-slate2-400">Vérification du statut...</p>}
+
+      {status && (
+        <div className="flex items-center justify-between flex-wrap gap-3 p-3 rounded-xl bg-slate2-50 mb-4">
+          <div className="flex items-center gap-2">
+            {status.connected ? <CheckCircle2 size={18} className="text-green-600" /> : <XCircle size={18} className="text-slate2-400" />}
+            <div>
+              <p className="text-sm font-medium text-slate2-800">
+                {status.connected ? `Connecté : ${status.email}` : 'Aucun compte Gmail connecté'}
+              </p>
+              {status.connected && status.connectedAt && (
+                <p className="text-xs text-slate2-400">Depuis le {new Date(status.connectedAt).toLocaleDateString('fr-FR')}</p>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {status.connected ? (
+              <>
+                <button className="btn btn-ghost" disabled={busy} onClick={connect}><Mail size={14} /> Reconnecter</button>
+                <button className="btn btn-danger" disabled={busy} onClick={disconnect}>Déconnecter</button>
+              </>
+            ) : (
+              <button className="btn btn-primary" disabled={busy} onClick={connect}><Mail size={14} /> Connecter mon compte Gmail</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <label className="block mb-4">
+        <span className="block text-sm font-medium text-slate2-700 mb-1">Signature e-mail</span>
+        <textarea
+          className="input"
+          rows={4}
+          style={{ resize: 'vertical' }}
+          value={signature}
+          onChange={(e) => setSignature(e.target.value)}
+          placeholder={"Cordialement,\nPrénom Nom\nNeogia — Data & IA"}
+        />
+        <span className="block text-xs text-slate2-400 mt-1">Utilisée par la variable {'{{signature}}'} dans les modèles d'e-mails.</span>
+      </label>
+      <div className="flex gap-2 flex-wrap">
+        <button className="btn btn-secondary" disabled={signatureSaving} onClick={saveSignature}>
+          {signatureSaving ? 'Enregistrement...' : 'Enregistrer la signature'}
+        </button>
+        <Link to="/modeles-email" className="btn btn-secondary">
+          <FileText size={14} /> Gérer les modèles d'e-mails
+        </Link>
+      </div>
+    </div>
   );
 }
 
