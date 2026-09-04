@@ -21,7 +21,9 @@ function toDatetimeInputValue(v) {
 }
 
 const EMPTY = { date_echange: toLocalDatetimeInput(new Date()), type: 'appel', objet: '', compte_rendu: '', prochaine_action: '', date_relance: '', auteur: 'Administrateur Neogia' };
-const OBJET_PRESETS = ['Appel', 'Mail', 'Rendez-vous'];
+// Exporté pour être réutilisé ailleurs (ex. filtre "Objet" du Journal des
+// échanges) — une seule source de vérité pour ces presets.
+export const OBJET_PRESETS = ['Appel', 'Mail', 'Rendez-vous'];
 
 export default function EchangeFormModal({ open, onClose, onSaved, contactId, echange }) {
   const [form, setForm] = useState(EMPTY);
