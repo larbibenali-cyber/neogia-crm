@@ -21,14 +21,15 @@ function toDatetimeInputValue(v) {
 }
 
 const EMPTY = { date_echange: toLocalDatetimeInput(new Date()), type: 'appel', objet: '', compte_rendu: '', prochaine_action: '', date_relance: '', auteur: 'Administrateur Neogia' };
-// Exporté pour être réutilisé ailleurs (ex. filtre "Objet" du Journal des
-// échanges) — une seule source de vérité pour ces presets.
+// Conservé et exporté pour compatibilité (ex. filtre "Objet" du Journal des
+// échanges, qui retrouve les échanges déjà enregistrés sous ces objets) —
+// le champ "Objet / titre" n'est en revanche plus proposé dans ce formulaire
+// (simplifié pour ne garder que le "Type" comme qualificatif de l'échange).
 export const OBJET_PRESETS = ['Appel', 'Mail', 'Rendez-vous'];
 
 export default function EchangeFormModal({ open, onClose, onSaved, contactId, echange }) {
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
-  const [objetCustom, setObjetCustom] = useState(false);
   const { getOptions } = usePickLists();
   const toast = useToast();
 
@@ -36,22 +37,10 @@ export default function EchangeFormModal({ open, onClose, onSaved, contactId, ec
     if (open) {
       const next = echange ? { ...EMPTY, ...echange, date_echange: toDatetimeInputValue(echange.date_echange) } : EMPTY;
       setForm(next);
-      setObjetCustom(!!next.objet && !OBJET_PRESETS.includes(next.objet));
     }
   }, [open, echange]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  const setObjetPreset = (e) => {
-    const v = e.target.value;
-    if (v === 'autre') {
-      setObjetCustom(true);
-      setForm((f) => ({ ...f, objet: '' }));
-    } else {
-      setObjetCustom(false);
-      setForm((f) => ({ ...f, objet: v }));
-    }
-  };
 
   const submit = async () => {
     if (!form.compte_rendu) return toast('Merci de renseigner un compte-rendu.', 'error');
@@ -77,21 +66,6 @@ export default function EchangeFormModal({ open, onClose, onSaved, contactId, ec
           </Select>
         </Field>
       </div>
-      <Field label="Objet / titre court">
-        <Select value={objetCustom ? 'autre' : (form.objet || '')} onChange={setObjetPreset}>
-          <option value="">Sélectionner...</option>
-          {OBJET_PRESETS.map((p) => <option key={p} value={p}>{p}</option>)}
-          <option value="autre">Autre (préciser)</option>
-        </Select>
-        {objetCustom && (
-          <input
-            className="input mt-2"
-            placeholder="Titre personnalisé"
-            value={form.objet || ''}
-            onChange={set('objet')}
-          />
-        )}
-      </Field>
       <Field label="Compte rendu" required>
         <textarea
           className="input"
