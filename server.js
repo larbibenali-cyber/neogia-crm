@@ -30,6 +30,14 @@ app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date().toISO
 // dans le fichier lui-même. Ne renvoie jamais de donnée sensible (redirection).
 app.use('/api/gmail', require('./server/routes/gmailPublic'));
 
+// ---- Extension navigateur "Import LinkedIn" (public vis-à-vis de Supabase) ----
+// Authentifiée par un jeton d'accès personnel dédié (Paramètres > Extension
+// LinkedIn), pas par une session Supabase — l'extension tourne dans le
+// navigateur de l'utilisateur, potentiellement sans session CRM active.
+// Montée AVANT requireAuth pour ne jamais exiger un jeton Supabase ici ;
+// sa propre protection (requireApiToken) est gérée dans le fichier lui-même.
+app.use('/api/extension', require('./server/routes/extension'));
+
 // ---- Toutes les routes API suivantes exigent une session Supabase Auth valide ----
 app.use('/api', requireAuth);
 
