@@ -80,6 +80,13 @@ router.post('/import', async (req, res, next) => {
       if (!ent) return res.status(404).json({ error: 'Entreprise introuvable.' });
     }
 
+    // L'email et le téléphone ne sont jamais lus sur la page LinkedIn (ils n'y
+    // sont pas publics) : ils viennent uniquement d'une saisie manuelle de
+    // l'utilisateur dans le panneau de l'extension, restent facultatifs, et
+    // ne remplacent une valeur déjà enregistrée que si l'utilisateur en a
+    // tapé une nouvelle.
+    const email = b.email !== undefined ? String(b.email).trim().toLowerCase() : undefined;
+
     let contact;
     if (b.contactId && b.updateExisting) {
       const existing = await dbGet('SELECT * FROM contacts WHERE id = ?', [b.contactId]);
@@ -87,6 +94,7 @@ router.post('/import', async (req, res, next) => {
       await dbRun(`
         UPDATE contacts SET
           fonction = @fonction, localisation = @localisation, linkedin_url = @linkedin_url,
+          email = @email, email_normalise = @email_normalise, telephone_mobile = @telephone_mobile,
           entreprise_id = @entreprise_id, updated_at = now()
         WHERE id = @id
       `, {
@@ -94,6 +102,9 @@ router.post('/import', async (req, res, next) => {
         fonction: b.fonction || existing.fonction,
         localisation: b.ville || existing.localisation,
         linkedin_url: b.linkedin_url || existing.linkedin_url,
+        email: email !== undefined ? (b.email || '') : (existing.email || ''),
+        email_normalise: email !== undefined ? email : existing.email_normalise,
+        telephone_mobile: b.telephone_mobile || existing.telephone_mobile || '',
         entreprise_id: entrepriseId,
       });
       contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [b.contactId]);
@@ -102,15 +113,20 @@ router.post('/import', async (req, res, next) => {
       const row = await dbGet(`
         INSERT INTO contacts (
           entreprise_id, nom, prenom, fonction, localisation, linkedin_url,
+          email, email_normalise, telephone_mobile,
           source, statut, incomplete, created_at, updated_at
         ) VALUES (
           @entreprise_id, @nom, @prenom, @fonction, @localisation, @linkedin_url,
-          'Extension LinkedIn', 'prospect_a_contacter', true, now(), now()
+          @email, @email_normalise, @telephone_mobile,
+          'Extension LinkedIn', 'prospect_a_contacter', @incomplete, now(), now()
         ) RETURNING id
       `, {
         entreprise_id: entrepriseId,
         nom: b.nom || '', prenom: b.prenom || '', fonction: b.fonction || '',
         localisation: b.ville || '', linkedin_url: b.linkedin_url || '',
+        email: b.email || '', email_normalise: email || '',
+        telephone_mobile: b.telephone_mobile || '',
+        incomplete: !(email || b.telephone_mobile),
       });
       contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [row.id]);
     }
