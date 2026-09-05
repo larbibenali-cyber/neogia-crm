@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { UploadCloud, Download, DatabaseBackup, Plus, Pencil, Mail, CheckCircle2, XCircle, FileText } from 'lucide-react';
+import { UploadCloud, Download, DatabaseBackup, Plus, Pencil, Mail, CheckCircle2, XCircle, FileText, KeyRound } from 'lucide-react';
 import { api, downloadFile } from '../lib/api';
 import { usePickLists } from '../lib/PickListsContext';
 import { useToast } from '../lib/ToastContext';
@@ -63,6 +63,8 @@ export default function Parametres() {
       </div>
 
       <GmailConnectionCard />
+
+      <ExtensionLinkedInCard />
 
       <div className="card p-6">
         <h2 className="font-heading font-semibold text-slate2-900 mb-1">Import Excel</h2>
@@ -255,6 +257,100 @@ function GmailConnectionCard() {
           <FileText size={14} /> Gérer les modèles d'e-mails
         </Link>
       </div>
+    </div>
+  );
+}
+
+// Carte "Extension navigateur LinkedIn" : génère/révoque le jeton d'accès
+// personnel utilisé par l'extension Chrome pour importer un contact depuis
+// une fiche LinkedIn. Le jeton en clair n'est affiché qu'une seule fois, à
+// la génération — seule sa présence (oui/non) et sa date sont conservées
+// côté interface ensuite.
+function ExtensionLinkedInCard() {
+  const toast = useToast();
+  const [status, setStatus] = useState(null); // { exists, createdAt } | null
+  const [busy, setBusy] = useState(false);
+  const [newToken, setNewToken] = useState(null);
+
+  const load = () => {
+    api.get('/settings/extension-token').then(setStatus).catch((e) => toast(e.message, 'error'));
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  const generate = async () => {
+    if (status?.exists && !window.confirm("Un jeton existe déjà. Le régénérer invalidera l'extension actuellement configurée avec l'ancien jeton. Continuer ?")) return;
+    setBusy(true);
+    try {
+      const res = await api.post('/settings/extension-token', {});
+      setNewToken(res.token);
+      load();
+    } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
+  };
+
+  const revoke = async () => {
+    if (!window.confirm("Révoquer ce jeton ? L'extension ne pourra plus importer de contacts tant qu'un nouveau jeton ne sera pas généré et reconfiguré dedans.")) return;
+    setBusy(true);
+    try {
+      await api.del('/settings/extension-token');
+      toast('Jeton révoqué.', 'success');
+      load();
+    } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
+  };
+
+  const copyToken = () => {
+    if (!newToken) return;
+    navigator.clipboard?.writeText(newToken).then(() => toast('Jeton copié.', 'success')).catch(() => {});
+  };
+
+  return (
+    <div className="card p-6">
+      <h2 className="font-heading font-semibold text-slate2-900 mb-1">Extension navigateur LinkedIn</h2>
+      <p className="text-sm text-slate2-500 mb-4">
+        L'extension Chrome fournie ajoute un bouton d'import en un clic sur les fiches LinkedIn : nom, poste, ville et
+        lien du profil sont envoyés ici, avec confirmation avant de créer une nouvelle entreprise ou un contact en
+        double. Générez un jeton d'accès ci-dessous, puis collez-le dans les réglages de l'extension — votre mot de
+        passe du CRM n'est lui jamais demandé dans l'extension.
+      </p>
+
+      {status === null && <p className="text-sm text-slate2-400">Vérification du statut...</p>}
+
+      {status && (
+        <div className="flex items-center justify-between flex-wrap gap-3 p-3 rounded-xl bg-slate2-50 mb-2">
+          <div className="flex items-center gap-2">
+            {status.exists ? <CheckCircle2 size={18} className="text-green-600" /> : <XCircle size={18} className="text-slate2-400" />}
+            <div>
+              <p className="text-sm font-medium text-slate2-800">
+                {status.exists ? 'Un jeton est actif' : 'Aucun jeton généré'}
+              </p>
+              {status.exists && status.createdAt && (
+                <p className="text-xs text-slate2-400">Généré le {new Date(status.createdAt).toLocaleDateString('fr-FR')}</p>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn btn-primary" disabled={busy} onClick={generate}>
+              <KeyRound size={14} /> {status.exists ? 'Régénérer' : 'Générer un jeton'}
+            </button>
+            {status.exists && <button className="btn btn-danger" disabled={busy} onClick={revoke}>Révoquer</button>}
+          </div>
+        </div>
+      )}
+
+      {newToken && (
+        <Modal open onClose={() => setNewToken(null)} title="Jeton d'accès généré">
+          <p className="text-sm text-slate2-600 mb-3">
+            Copiez ce jeton maintenant et collez-le dans les réglages de l'extension Chrome. Il ne sera plus jamais
+            affiché — s'il est perdu, il faudra en régénérer un nouveau (ce qui invalidera celui-ci).
+          </p>
+          <div className="flex gap-2">
+            <input className="input font-mono text-xs" readOnly value={newToken} onFocus={(e) => e.target.select()} />
+            <button className="btn btn-secondary shrink-0" onClick={copyToken}>Copier</button>
+          </div>
+          <div className="flex justify-end mt-4">
+            <button className="btn btn-primary" onClick={() => setNewToken(null)}>J'ai copié le jeton</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
