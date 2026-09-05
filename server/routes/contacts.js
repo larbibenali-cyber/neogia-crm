@@ -202,7 +202,12 @@ router.put('/:id', async (req, res, next) => {
     const existing = await dbGet('SELECT * FROM contacts WHERE id = ?', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Contact introuvable' });
     const b = req.body;
-    const email = b.email !== undefined ? String(b.email).trim().toLowerCase() : existing.email_normalise;
+    // b.email peut valoir `null` (ex. valeur vide venant du formulaire) : il
+    // faut le traiter comme une chaîne vide, sinon String(null) produit le
+    // texte "null" à quatre lettres, qui est ensuite stocké tel quel et peut
+    // entrer en collision avec un autre contact de la même entreprise (la
+    // contrainte d'unicité ne considère plus la valeur comme "vide").
+    const email = b.email !== undefined ? String(b.email || '').trim().toLowerCase() : existing.email_normalise;
     await dbRun(`
       UPDATE contacts SET
         nom = @nom, prenom = @prenom, fonction = @fonction, email = @email, email_normalise = @email_normalise,

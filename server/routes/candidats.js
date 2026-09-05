@@ -214,7 +214,9 @@ router.put('/:id', async (req, res, next) => {
     const existing = await dbGet('SELECT * FROM candidats WHERE id = ?', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Candidat introuvable' });
     const b = req.body;
-    const email = b.email !== undefined ? String(b.email).trim().toLowerCase() : existing.email_normalise;
+    // b.email peut valoir `null` : String(null) donnerait le texte "null" à
+    // quatre lettres au lieu d'une valeur vide (même bug que sur /contacts).
+    const email = b.email !== undefined ? String(b.email || '').trim().toLowerCase() : existing.email_normalise;
     await dbRun(`
       UPDATE candidats SET
         prenom=@prenom, nom=@nom, email=@email, email_normalise=@email_normalise, telephone=@telephone,
