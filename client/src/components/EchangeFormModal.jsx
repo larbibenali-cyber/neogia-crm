@@ -35,7 +35,14 @@ export default function EchangeFormModal({ open, onClose, onSaved, contactId, ec
 
   useEffect(() => {
     if (open) {
-      const next = echange ? { ...EMPTY, ...echange, date_echange: toDatetimeInputValue(echange.date_echange) } : EMPTY;
+      // EMPTY.date_echange est calculé une seule fois, au chargement du module
+      // (pas à chaque ouverture) : si l'onglet reste ouvert un moment, réutiliser
+      // EMPTY tel quel affichait l'heure du chargement de la page, pas l'heure
+      // actuelle — d'où des horaires qui semblaient "aléatoires". On recalcule
+      // donc l'heure courante à chaque ouverture pour un nouvel échange.
+      const next = echange
+        ? { ...EMPTY, ...echange, date_echange: toDatetimeInputValue(echange.date_echange) }
+        : { ...EMPTY, date_echange: toLocalDatetimeInput(new Date()) };
       setForm(next);
     }
   }, [open, echange]);
