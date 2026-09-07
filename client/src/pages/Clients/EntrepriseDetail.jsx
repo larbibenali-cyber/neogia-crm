@@ -9,6 +9,7 @@ import TechCloud from '../../components/TechCloud';
 import ContactFormModal from '../../components/ContactFormModal';
 import BesoinFormModal from '../../components/BesoinFormModal';
 import ContactPhones from '../../components/ContactPhones';
+import ContactEmail from '../../components/ContactEmail';
 import EchangeFormModal from '../../components/EchangeFormModal';
 import { timeAgo } from '../../lib/format';
 import { useToast } from '../../lib/ToastContext';
@@ -132,8 +133,9 @@ export default function EntrepriseDetail() {
                 <Avatar prenom={c.prenom} nom={c.nom} size={38} />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-slate2-800 truncate">{c.prenom} {c.nom}</p>
-                  <p className="text-xs text-slate2-400 truncate">{c.fonction || c.email || '—'}</p>
-                  <ContactPhones contact={c} className="mt-0.5" />
+                  <p className="text-xs text-slate2-400 truncate">{c.fonction || '—'}</p>
+                  <ContactEmail contact={c} className="mt-0.5" compact />
+                  <ContactPhones contact={c} className="mt-0.5" compact />
                 </div>
                 <StatusBadge category="contact_status" value={c.statut} small />
               </div>
