@@ -273,22 +273,39 @@ router.post('/cv-extract', upload.single('cv'), async (req, res) => {
 });
 
 // ---- CV (stockage privé Supabase Storage) ----
-router.post('/:id/cv', upload.single('cv'), async (req, res, next) => {
+// Jusqu'à 3 CV par candidat (dépôt possible de plusieurs fichiers PDF en une
+// seule fois, glissés-déposés ensemble) : contrairement à l'ancien
+// comportement (un seul CV « actif », les précédents étant désactivés à
+// chaque nouvel envoi), les CV coexistent désormais tous jusqu'à suppression
+// manuelle — la colonne `active` est conservée dans le schéma mais toujours
+// vraie ici, la limite de 3 étant appliquée explicitement ci-dessous.
+const MAX_CVS_PAR_CANDIDAT = 3;
+router.post('/:id/cv', upload.array('cv', MAX_CVS_PAR_CANDIDAT), async (req, res, next) => {
   try {
     const candidat = await dbGet('SELECT * FROM candidats WHERE id = ?', [req.params.id]);
     if (!candidat) return res.status(404).json({ error: 'Candidat introuvable' });
-    if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu (champ "cv" attendu, PDF uniquement)' });
+    const files = req.files || [];
+    if (files.length === 0) return res.status(400).json({ error: 'Aucun fichier reçu (champ "cv" attendu, PDF uniquement)' });
 
-    const storagePath = await uploadCv(candidat.id, req.file.buffer, req.file.mimetype);
+    const existingCount = (await dbAll('SELECT id FROM cvs WHERE candidat_id = ?', [candidat.id])).length;
+    if (existingCount + files.length > MAX_CVS_PAR_CANDIDAT) {
+      return res.status(400).json({
+        error: existingCount > 0
+          ? `${MAX_CVS_PAR_CANDIDAT} CV maximum par candidat (${existingCount} déjà présent(s) — supprimez-en un avant d'en ajouter d'autres).`
+          : `${MAX_CVS_PAR_CANDIDAT} CV maximum par candidat.`,
+      });
+    }
 
-    await dbRun('UPDATE cvs SET active = false WHERE candidat_id = ?', [candidat.id]);
-    const row = await dbGet(`
-      INSERT INTO cvs (candidat_id, storage_path, original_name, mime, size, active, uploaded_at)
-      VALUES (?, ?, ?, ?, ?, true, now()) RETURNING id
-    `, [candidat.id, storagePath, req.file.originalname, req.file.mimetype, req.file.size]);
-
-    const cv = await dbGet('SELECT id, candidat_id, original_name, mime, size, active, uploaded_at FROM cvs WHERE id = ?', [row.id]);
-    res.status(201).json(cv);
+    const created = [];
+    for (const file of files) {
+      const storagePath = await uploadCv(candidat.id, file.buffer, file.mimetype);
+      const row = await dbGet(`
+        INSERT INTO cvs (candidat_id, storage_path, original_name, mime, size, active, uploaded_at)
+        VALUES (?, ?, ?, ?, ?, true, now()) RETURNING id
+      `, [candidat.id, storagePath, file.originalname, file.mimetype, file.size]);
+      created.push(await dbGet('SELECT id, candidat_id, original_name, mime, size, active, uploaded_at FROM cvs WHERE id = ?', [row.id]));
+    }
+    res.status(201).json(created);
   } catch (err) { next(err); }
 });
 
