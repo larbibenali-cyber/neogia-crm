@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Filter, Download, X, MapPin } from 'lucide-react';
 import { api, qs, downloadFile } from '../../lib/api';
@@ -29,12 +29,26 @@ export default function CandidatsList() {
   };
 
   const [error, setError] = useState(null);
+  // Chaque changement de filtre déclenche un nouvel appel réseau ; sans garde-fou,
+  // les réponses peuvent revenir dans le désordre (ex. la réponse d'une recherche
+  // à 3 lettres arrivant après celle à 4 lettres) et écraser l'affichage avec un
+  // résultat obsolète — c'est ce qui provoquait "parfois aucun résultat, parfois
+  // tous les CV" en tapant. On numérote chaque requête et on ignore toute réponse
+  // qui n'est plus la plus récente.
+  const requestIdRef = useRef(0);
   const load = () => {
     setLoading(true);
     setError(null);
+    const requestId = ++requestIdRef.current;
     api.get(`/candidats${qs({ ...filters, pageSize: 24 })}`)
-      .then((d) => { setData(d); setLoading(false); })
-      .catch((e) => { setError(e.message || 'Le chargement des candidats a échoué.'); setLoading(false); });
+      .then((d) => {
+        if (requestId !== requestIdRef.current) return;
+        setData(d); setLoading(false);
+      })
+      .catch((e) => {
+        if (requestId !== requestIdRef.current) return;
+        setError(e.message || 'Le chargement des candidats a échoué.'); setLoading(false);
+      });
   };
   useEffect(() => { load(); }, [params]);
 
@@ -44,6 +58,37 @@ export default function CandidatsList() {
     if (!('page' in patch)) next.delete('page');
     setParams(next);
   };
+
+  // Champs de saisie texte : on garde une valeur locale affichée immédiatement
+  // (pas de latence au clavier) et on ne répercute vers l'URL / la recherche
+  // qu'après une courte pause dans la frappe, pour éviter de déclencher un appel
+  // réseau à chaque lettre tapée.
+  const useDebouncedFilter = (key) => {
+    const [text, setText] = useState(filters[key]);
+    const lastUrlValueRef = useRef(filters[key]);
+    useEffect(() => {
+      if (params.get(key) !== lastUrlValueRef.current) {
+        lastUrlValueRef.current = params.get(key) || '';
+        setText(params.get(key) || '');
+      }
+    }, [params]);
+    useEffect(() => {
+      const t = setTimeout(() => {
+        if (text !== (params.get(key) || '')) {
+          lastUrlValueRef.current = text;
+          updateParam({ [key]: text });
+        }
+      }, 350);
+      return () => clearTimeout(t);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [text]);
+    return [text, setText];
+  };
+
+  const [searchText, setSearchText] = useDebouncedFilter('search');
+  const [techText, setTechText] = useDebouncedFilter('tech');
+  const [metierText, setMetierText] = useDebouncedFilter('metier');
+  const [localisationText, setLocalisationText] = useDebouncedFilter('localisation');
 
   return (
     <div className="space-y-5">
@@ -60,7 +105,7 @@ export default function CandidatsList() {
 
       <div className="card p-4">
         <div className="flex gap-3 items-center flex-wrap">
-          <input className="input flex-1 min-w-[240px]" placeholder="Rechercher (nom, métier, compétences...)" defaultValue={filters.search} onChange={(e) => updateParam({ search: e.target.value })} />
+          <input className="input flex-1 min-w-[240px]" placeholder="Rechercher (nom, métier, compétences...)" value={searchText} onChange={(e) => setSearchText(e.target.value)} />
           <button className={`btn ${showFilters ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setShowFilters((s) => !s)}><Filter size={16} /> Filtres</button>
           {(filters.tech || filters.metier || filters.disponibilite || filters.localisation || filters.statut) && (
             <button className="btn btn-ghost text-red-500" onClick={() => setParams({})}><X size={14} /> Réinitialiser</button>
@@ -69,11 +114,11 @@ export default function CandidatsList() {
         {showFilters && (
           <div className="grid md:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate2-100">
             <div><label className="text-xs font-medium text-slate2-500">Environnement technique</label>
-              <input className="input mt-1" placeholder="ex: Python, Azure" defaultValue={filters.tech} onChange={(e) => updateParam({ tech: e.target.value })} /></div>
+              <input className="input mt-1" placeholder="ex: Python, Azure" value={techText} onChange={(e) => setTechText(e.target.value)} /></div>
             <div><label className="text-xs font-medium text-slate2-500">Métier</label>
-              <input className="input mt-1" defaultValue={filters.metier} onChange={(e) => updateParam({ metier: e.target.value })} /></div>
+              <input className="input mt-1" value={metierText} onChange={(e) => setMetierText(e.target.value)} /></div>
             <div><label className="text-xs font-medium text-slate2-500">Localisation</label>
-              <input className="input mt-1" defaultValue={filters.localisation} onChange={(e) => updateParam({ localisation: e.target.value })} /></div>
+              <input className="input mt-1" value={localisationText} onChange={(e) => setLocalisationText(e.target.value)} /></div>
             <div><label className="text-xs font-medium text-slate2-500">Statut</label>
               <select className="input mt-1" value={filters.statut} onChange={(e) => updateParam({ statut: e.target.value })}>
                 <option value="">Tous</option>
