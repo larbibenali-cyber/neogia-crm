@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
-  Mail, Phone, Smartphone, MapPin, Building2, ArrowLeft, Pencil, Archive, Trash2, Plus, Send,
+  Mail, Smartphone, MapPin, Building2, ArrowLeft, Pencil, Archive, Trash2, Plus, Send,
   Phone as PhoneIcon, Mail as MailIcon, Linkedin, Users, Video, MessageCircle, Briefcase,
 } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -9,13 +9,15 @@ import { Loading, EmptyState, Avatar } from '../../components/ui';
 import StatusBadge from '../../components/StatusBadge';
 import TechCloud from '../../components/TechCloud';
 import ContactFormModal from '../../components/ContactFormModal';
+import ContactEmail from '../../components/ContactEmail';
+import ContactPhones from '../../components/ContactPhones';
 import EchangeFormModal from '../../components/EchangeFormModal';
 import BesoinFormModal from '../../components/BesoinFormModal';
 import SendEmailModal from '../../components/SendEmailModal';
 import { usePickLists } from '../../lib/PickListsContext';
 import { useToast } from '../../lib/ToastContext';
 import { useConfirm } from '../../lib/ConfirmContext';
-import { formatDate, timeAgo, formatPhoneFR, phoneHref } from '../../lib/format';
+import { formatDate, timeAgo } from '../../lib/format';
 
 const TYPE_ICONS = { appel: PhoneIcon, email: MailIcon, linkedin: Linkedin, reunion: Users, visio: Video, autre: MessageCircle };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -108,12 +110,19 @@ export default function ContactDetail() {
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5 pt-5 border-t border-slate2-100 text-sm">
-          <InfoRow icon={Mail} value={contact.email} href={contact.email ? `mailto:${contact.email}` : null} />
-          {contact.telephone_mobile && (
-            <InfoRow icon={Smartphone} value={formatPhoneFR(contact.telephone_mobile)} href={phoneHref(contact.telephone_mobile)} />
+          {contact.email || (contact.emails_supplementaires || []).length > 0 ? (
+            <div className="flex items-start gap-2 text-slate2-700">
+              <Mail size={14} className="shrink-0 mt-0.5" />
+              <ContactEmail contact={contact} size="md" />
+            </div>
+          ) : (
+            <InfoRow icon={Mail} value={null} />
           )}
-          {contact.telephone_fixe && (
-            <InfoRow icon={Phone} value={formatPhoneFR(contact.telephone_fixe)} href={phoneHref(contact.telephone_fixe)} />
+          {(contact.telephone_mobile || (contact.mobiles_supplementaires || []).length > 0 || contact.telephone_fixe) && (
+            <div className="flex items-start gap-2 text-slate2-700">
+              <Smartphone size={14} className="shrink-0 mt-0.5" />
+              <ContactPhones contact={contact} size="md" />
+            </div>
           )}
           <InfoRow icon={MapPin} value={contact.localisation} />
         </div>
