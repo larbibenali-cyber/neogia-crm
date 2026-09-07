@@ -4,6 +4,22 @@ const { paginate, toTagsArray, parseJsonSafe } = require('../utils');
 
 const router = express.Router();
 
+// Un prospect a parfois plusieurs emails ou plusieurs mobiles : ces champs
+// arrivent du formulaire sous forme de tableau (potentiellement avec des
+// entrées vides ou dupliquées côté client) — on nettoie avant stockage.
+function toStringArray(value) {
+  const arr = Array.isArray(value) ? value : [];
+  const seen = new Set();
+  const out = [];
+  for (const v of arr) {
+    const s = String(v ?? '').trim();
+    if (!s || seen.has(s.toLowerCase())) continue;
+    seen.add(s.toLowerCase());
+    out.push(s);
+  }
+  return out;
+}
+
 async function attachExtras(contact) {
   if (!contact) return contact;
   contact.tags = parseJsonSafe(contact.tags, []);
@@ -24,8 +40,10 @@ router.get('/check-duplicate', async (req, res, next) => {
       const e = String(email).trim().toLowerCase();
       matches.push(...await dbAll(`
         SELECT c.*, ent.nom as entreprise_nom FROM contacts c JOIN entreprises ent ON ent.id = c.entreprise_id
-        WHERE c.email_normalise = ? AND c.archived = false
-      `, [e]));
+        WHERE c.archived = false AND (
+          c.email_normalise = ? OR EXISTS (SELECT 1 FROM unnest(c.emails_supplementaires) x WHERE lower(x) = ?)
+        )
+      `, [e, e]));
     }
     if (telephone) {
       const t = String(telephone).replace(/\D/g, '');
@@ -34,7 +52,8 @@ router.get('/check-duplicate', async (req, res, next) => {
         all.forEach((c) => {
           const cm = (c.telephone_mobile || '').replace(/\D/g, '');
           const cf = (c.telephone_fixe || '').replace(/\D/g, '');
-          if ((cm && cm === t) || (cf && cf === t)) matches.push(c);
+          const extras = (c.mobiles_supplementaires || []).map((m) => (m || '').replace(/\D/g, ''));
+          if ((cm && cm === t) || (cf && cf === t) || extras.includes(t)) matches.push(c);
         });
       }
     }
@@ -66,7 +85,9 @@ router.get('/', async (req, res, next) => {
     if (search) {
       where.push(`(
         c.nom ILIKE @s OR c.prenom ILIKE @s OR c.email ILIKE @s OR c.telephone_mobile ILIKE @s OR
-        c.telephone_fixe ILIKE @s OR c.fonction ILIKE @s OR ent.nom ILIKE @s OR c.notes ILIKE @s
+        c.telephone_fixe ILIKE @s OR c.fonction ILIKE @s OR ent.nom ILIKE @s OR c.notes ILIKE @s OR
+        EXISTS (SELECT 1 FROM unnest(c.emails_supplementaires) x WHERE x ILIKE @s) OR
+        EXISTS (SELECT 1 FROM unnest(c.mobiles_supplementaires) x WHERE x ILIKE @s)
       )`);
       params.s = `%${search}%`;
     }
@@ -174,23 +195,28 @@ router.post('/', async (req, res, next) => {
     if (!b.nom && !b.prenom) return res.status(400).json({ error: 'Nom ou prénom requis' });
 
     const email = (b.email || '').trim().toLowerCase();
+    const emailsSupp = toStringArray(b.emails_supplementaires);
+    const mobilesSupp = toStringArray(b.mobiles_supplementaires);
     const row = await dbGet(`
       INSERT INTO contacts (
-        entreprise_id, nom, prenom, fonction, email, email_normalise, telephone_mobile, telephone_fixe,
+        entreprise_id, nom, prenom, fonction, email, email_normalise, emails_supplementaires,
+        telephone_mobile, mobiles_supplementaires, telephone_fixe,
         localisation, source, statut, responsable, notes, tags, incomplete, created_at, updated_at
       ) VALUES (
-        @entreprise_id, @nom, @prenom, @fonction, @email, @email_normalise, @telephone_mobile, @telephone_fixe,
+        @entreprise_id, @nom, @prenom, @fonction, @email, @email_normalise, @emails_supplementaires,
+        @telephone_mobile, @mobiles_supplementaires, @telephone_fixe,
         @localisation, @source, @statut, @responsable, @notes, @tags, @incomplete, now(), now()
       ) RETURNING id
     `, {
       entreprise_id: b.entreprise_id,
       nom: b.nom || '', prenom: b.prenom || '', fonction: b.fonction || '',
-      email: b.email || '', email_normalise: email,
-      telephone_mobile: b.telephone_mobile || '', telephone_fixe: b.telephone_fixe || '',
+      email: b.email || '', email_normalise: email, emails_supplementaires: emailsSupp,
+      telephone_mobile: b.telephone_mobile || '', mobiles_supplementaires: mobilesSupp,
+      telephone_fixe: b.telephone_fixe || '',
       localisation: b.localisation || '', source: b.source || 'Saisie manuelle',
       statut: b.statut || 'prospect_a_contacter', responsable: b.responsable || '',
       notes: b.notes || '', tags: JSON.stringify(toTagsArray(b.tags)),
-      incomplete: (!email && !b.telephone_mobile && !b.telephone_fixe),
+      incomplete: (!email && emailsSupp.length === 0 && !b.telephone_mobile && mobilesSupp.length === 0 && !b.telephone_fixe),
     });
     const created = await dbGet('SELECT * FROM contacts WHERE id = ?', [row.id]);
     res.status(201).json(await attachExtras(created));
@@ -208,18 +234,23 @@ router.put('/:id', async (req, res, next) => {
     // entrer en collision avec un autre contact de la même entreprise (la
     // contrainte d'unicité ne considère plus la valeur comme "vide").
     const email = b.email !== undefined ? String(b.email || '').trim().toLowerCase() : existing.email_normalise;
+    const emailsSupp = b.emails_supplementaires !== undefined ? toStringArray(b.emails_supplementaires) : (existing.emails_supplementaires || []);
+    const mobilesSupp = b.mobiles_supplementaires !== undefined ? toStringArray(b.mobiles_supplementaires) : (existing.mobiles_supplementaires || []);
     await dbRun(`
       UPDATE contacts SET
         nom = @nom, prenom = @prenom, fonction = @fonction, email = @email, email_normalise = @email_normalise,
-        telephone_mobile = @telephone_mobile, telephone_fixe = @telephone_fixe, localisation = @localisation,
+        emails_supplementaires = @emails_supplementaires,
+        telephone_mobile = @telephone_mobile, mobiles_supplementaires = @mobiles_supplementaires,
+        telephone_fixe = @telephone_fixe, localisation = @localisation,
         source = @source, statut = @statut, responsable = @responsable, notes = @notes, tags = @tags,
         updated_at = now()
       WHERE id = @id
     `, {
       id: req.params.id,
       nom: b.nom ?? existing.nom, prenom: b.prenom ?? existing.prenom, fonction: b.fonction ?? existing.fonction,
-      email: b.email ?? existing.email, email_normalise: email,
-      telephone_mobile: b.telephone_mobile ?? existing.telephone_mobile, telephone_fixe: b.telephone_fixe ?? existing.telephone_fixe,
+      email: b.email ?? existing.email, email_normalise: email, emails_supplementaires: emailsSupp,
+      telephone_mobile: b.telephone_mobile ?? existing.telephone_mobile, mobiles_supplementaires: mobilesSupp,
+      telephone_fixe: b.telephone_fixe ?? existing.telephone_fixe,
       localisation: b.localisation ?? existing.localisation, source: b.source ?? existing.source,
       statut: b.statut ?? existing.statut, responsable: b.responsable ?? existing.responsable,
       notes: b.notes ?? existing.notes, tags: JSON.stringify(toTagsArray(b.tags ?? parseJsonSafe(existing.tags, []))),
