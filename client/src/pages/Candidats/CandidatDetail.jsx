@@ -77,17 +77,37 @@ export default function CandidatDetail() {
     navigate('/candidats');
   };
 
-  const uploadCv = async (file) => {
-    if (!file || file.type !== 'application/pdf') return toast('Seuls les fichiers PDF sont acceptés.', 'error');
+  const MAX_CVS = 3;
+
+  // Accepte un fichier unique (sélecteur classique) ou plusieurs à la fois
+  // (glisser-déposer groupé), dans la limite de 3 CV au total par candidat.
+  const uploadCv = async (fileOrFileList) => {
+    const files = fileOrFileList instanceof FileList || Array.isArray(fileOrFileList)
+      ? Array.from(fileOrFileList)
+      : [fileOrFileList].filter(Boolean);
+    if (files.length === 0) return;
+    if (files.some((f) => f.type !== 'application/pdf')) {
+      return toast('Seuls les fichiers PDF sont acceptés.', 'error');
+    }
+    const remaining = MAX_CVS - candidat.cvs.length;
+    if (remaining <= 0) {
+      return toast(`${MAX_CVS} CV maximum par candidat : supprimez-en un avant d'en ajouter un autre.`, 'error');
+    }
+    if (files.length > remaining) {
+      return toast(`Vous ne pouvez ajouter que ${remaining} fichier(s) de plus (${MAX_CVS} CV maximum par candidat).`, 'error');
+    }
     setUploading(true);
     const fd = new FormData();
-    fd.append('cv', file);
+    files.forEach((f) => fd.append('cv', f));
     try {
-      const cv = await api.post(`/candidats/${id}/cv`, fd);
-      toast('CV déposé avec succès.', 'success');
+      const created = await api.post(`/candidats/${id}/cv`, fd);
+      toast(created.length > 1 ? `${created.length} CV déposés avec succès.` : 'CV déposé avec succès.', 'success');
       load();
-      const { suggestion, note } = await api.post(`/candidats/${id}/cv/${cv.id}/extract`, {});
-      setExtraction({ cvId: cv.id, suggestion, note });
+      const first = created[0];
+      if (first) {
+        const { suggestion, note } = await api.post(`/candidats/${id}/cv/${first.id}/extract`, {});
+        setExtraction({ cvId: first.id, suggestion, note });
+      }
     } catch (err) {
       toast(err.message, 'error');
     } finally { setUploading(false); }
@@ -106,8 +126,6 @@ export default function CandidatDetail() {
     setExtraction(null);
     load();
   };
-
-  const activeCv = candidat.cvs.find((c) => c.active);
 
   const downloadCv = async (cv) => {
     try {
@@ -187,19 +205,27 @@ export default function CandidatDetail() {
 
         {tab === 'profil' && (
           <div className="p-6">
-            <div
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => { e.preventDefault(); setDragOver(false); uploadCv(e.dataTransfer.files[0]); }}
-              className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors ${dragOver ? 'border-brand bg-brand-50' : 'border-slate2-200'}`}
-            >
-              <UploadCloud size={28} className="mx-auto text-brand mb-2" />
-              <p className="text-sm text-slate2-600">Glissez-déposez un CV au format PDF, ou</p>
-              <button className="btn btn-secondary mt-2" onClick={() => fileInput.current?.click()} disabled={uploading}>
-                {uploading ? 'Envoi en cours...' : 'Parcourir'}
-              </button>
-              <input ref={fileInput} type="file" accept="application/pdf" hidden onChange={(e) => uploadCv(e.target.files[0])} />
-            </div>
+            {candidat.cvs.length < MAX_CVS ? (
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => { e.preventDefault(); setDragOver(false); uploadCv(e.dataTransfer.files); }}
+                className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors ${dragOver ? 'border-brand bg-brand-50' : 'border-slate2-200'}`}
+              >
+                <UploadCloud size={28} className="mx-auto text-brand mb-2" />
+                <p className="text-sm text-slate2-600">Glissez-déposez jusqu'à {MAX_CVS} CV au format PDF, ou</p>
+                <button className="btn btn-secondary mt-2" onClick={() => fileInput.current?.click()} disabled={uploading}>
+                  {uploading ? 'Envoi en cours...' : 'Parcourir'}
+                </button>
+                <p className="text-xs text-slate2-400 mt-2">{candidat.cvs.length}/{MAX_CVS} CV — encore {MAX_CVS - candidat.cvs.length} possible(s)</p>
+                <input ref={fileInput} type="file" accept="application/pdf" multiple hidden onChange={(e) => uploadCv(e.target.files)} />
+              </div>
+            ) : (
+              <div className="border-2 border-dashed rounded-2xl p-8 text-center border-slate2-200 bg-slate2-50">
+                <UploadCloud size={28} className="mx-auto text-slate2-300 mb-2" />
+                <p className="text-sm text-slate2-500">Limite de {MAX_CVS} CV atteinte — supprimez-en un pour en ajouter un autre.</p>
+              </div>
+            )}
 
             {candidat.cvs.length > 0 && (
               <div className="mt-5 space-y-2">
@@ -209,9 +235,7 @@ export default function CandidatDetail() {
                       <FileText size={18} className="text-brand shrink-0" />
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-slate2-800 truncate">{cv.original_name}</p>
-                        <p className="text-xs text-slate2-400">
-                          {cv.active ? 'Version actuelle' : 'Version précédente'} — ajouté le {formatDate(cv.uploaded_at)}
-                        </p>
+                        <p className="text-xs text-slate2-400">Ajouté le {formatDate(cv.uploaded_at)}</p>
                       </div>
                     </div>
                     <div className="flex gap-1 shrink-0">
