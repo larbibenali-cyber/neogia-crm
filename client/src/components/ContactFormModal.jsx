@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Plus, X } from 'lucide-react';
 import { Modal, Field, Select } from './ui';
 import EntrepriseCombo from './EntrepriseCombo';
 import TagsInput from './TagsInput';
@@ -8,9 +8,36 @@ import { useToast } from '../lib/ToastContext';
 import { api } from '../lib/api';
 
 const EMPTY = {
-  entreprise_id: '', nom: '', prenom: '', fonction: '', email: '', telephone_mobile: '', telephone_fixe: '',
+  entreprise_id: '', nom: '', prenom: '', fonction: '', email: '', emails_supplementaires: [],
+  telephone_mobile: '', mobiles_supplementaires: [], telephone_fixe: '',
   localisation: '', source: 'Saisie manuelle', statut: 'prospect_a_contacter', responsable: '', notes: '', tags: [],
 };
+
+// Un prospect a parfois plusieurs emails ou plusieurs mobiles : un champ
+// principal + une liste d'entrées supplémentaires (ajout/suppression libre).
+function MultiValueField({ label, addLabel, type = 'text', primary, onPrimaryChange, extras, onExtrasChange }) {
+  const addRow = () => onExtrasChange([...extras, '']);
+  const updateRow = (i, v) => onExtrasChange(extras.map((x, idx) => (idx === i ? v : x)));
+  const removeRow = (i) => onExtrasChange(extras.filter((_, idx) => idx !== i));
+  return (
+    <Field label={label}>
+      <div className="space-y-1.5">
+        <input className="input" type={type} value={primary} onChange={(e) => onPrimaryChange(e.target.value)} />
+        {extras.map((v, i) => (
+          <div key={i} className="flex gap-1.5">
+            <input className="input" type={type} value={v} onChange={(e) => updateRow(i, e.target.value)} />
+            <button type="button" className="btn btn-ghost !px-2" title="Supprimer" onClick={() => removeRow(i)}>
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+        <button type="button" className="text-xs text-brand hover:underline flex items-center gap-1" onClick={addRow}>
+          <Plus size={12} /> {addLabel}
+        </button>
+      </div>
+    </Field>
+  );
+}
 
 export default function ContactFormModal({ open, onClose, onSaved, contact, defaultEntrepriseId }) {
   const [form, setForm] = useState(EMPTY);
@@ -21,7 +48,11 @@ export default function ContactFormModal({ open, onClose, onSaved, contact, defa
 
   useEffect(() => {
     if (open) {
-      setForm(contact ? { ...EMPTY, ...contact, tags: contact.tags || [] } : { ...EMPTY, entreprise_id: defaultEntrepriseId || '' });
+      setForm(contact ? {
+        ...EMPTY, ...contact, tags: contact.tags || [],
+        emails_supplementaires: contact.emails_supplementaires || [],
+        mobiles_supplementaires: contact.mobiles_supplementaires || [],
+      } : { ...EMPTY, entreprise_id: defaultEntrepriseId || '' });
       setDuplicates([]);
     }
   }, [open, contact, defaultEntrepriseId]);
@@ -51,9 +82,14 @@ export default function ContactFormModal({ open, onClose, onSaved, contact, defa
     }
     setSaving(true);
     try {
+      const payload = {
+        ...form,
+        emails_supplementaires: (form.emails_supplementaires || []).map((v) => v.trim()).filter(Boolean),
+        mobiles_supplementaires: (form.mobiles_supplementaires || []).map((v) => v.trim()).filter(Boolean),
+      };
       const saved = contact
-        ? await api.put(`/contacts/${contact.id}`, form)
-        : await api.post('/contacts', form);
+        ? await api.put(`/contacts/${contact.id}`, payload)
+        : await api.post('/contacts', payload);
       toast(contact ? 'Contact mis à jour.' : 'Contact créé.', 'success');
       onSaved(saved);
       onClose();
@@ -94,8 +130,16 @@ export default function ContactFormModal({ open, onClose, onSaved, contact, defa
         <Field label="Prénom"><input className="input" value={form.prenom} onChange={set('prenom')} /></Field>
         <Field label="Fonction"><input className="input" value={form.fonction} onChange={set('fonction')} /></Field>
         <Field label="Responsable de la fiche"><input className="input" value={form.responsable} onChange={set('responsable')} /></Field>
-        <Field label="E-mail"><input className="input" type="email" value={form.email} onChange={set('email')} /></Field>
-        <Field label="Téléphone mobile"><input className="input" value={form.telephone_mobile} onChange={set('telephone_mobile')} /></Field>
+        <MultiValueField
+          label="E-mail" addLabel="Ajouter un e-mail" type="email"
+          primary={form.email} onPrimaryChange={(v) => setForm((f) => ({ ...f, email: v }))}
+          extras={form.emails_supplementaires} onExtrasChange={(arr) => setForm((f) => ({ ...f, emails_supplementaires: arr }))}
+        />
+        <MultiValueField
+          label="Téléphone mobile" addLabel="Ajouter un mobile"
+          primary={form.telephone_mobile} onPrimaryChange={(v) => setForm((f) => ({ ...f, telephone_mobile: v }))}
+          extras={form.mobiles_supplementaires} onExtrasChange={(arr) => setForm((f) => ({ ...f, mobiles_supplementaires: arr }))}
+        />
         <Field label="Téléphone fixe"><input className="input" value={form.telephone_fixe} onChange={set('telephone_fixe')} /></Field>
         <Field label="Localisation"><input className="input" value={form.localisation} onChange={set('localisation')} /></Field>
         <Field label="Source"><input className="input" value={form.source} onChange={set('source')} /></Field>
