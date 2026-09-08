@@ -131,12 +131,21 @@ router.get('/', async (req, res, next) => {
     // la liste exacte des éléments qui la composent, chacun cliquable vers sa fiche
     // complète. Le compte affiché (`activite_mois`) et la liste de détail
     // (`activite_mois_details`) proviennent de la même requête, donc toujours cohérents.
+    // NB : contrairement aux deux autres barres (candidats positionnés / entretiens
+    // réalisés), ce n'est PAS borné au mois en cours. On veut le même nombre que les
+    // autres widgets « Besoins détectés » du tableau de bord (liste du haut, « Besoins
+    // par statut ») : le total des besoins actuellement au statut « Besoin détecté ».
+    // Filtrer uniquement sur la date de création (b.created_at >= @monthStart) causait
+    // deux problèmes : un besoin créé ce mois-ci mais depuis passé « Perdu »/« Gagné »
+    // restait compté ici (d'où un besoin affiché comme « détecté » alors qu'il est
+    // perdu), et un besoin toujours « Besoin détecté » mais créé avant le 1er du mois
+    // n'était lui pas compté — d'où un total différent de celui affiché ailleurs.
     const besoinsDetectesMoisRows = await dbAll(`
       SELECT b.id, b.titre, b.reference, e.nom AS entreprise_nom
       FROM besoins b JOIN entreprises e ON e.id = b.entreprise_id
-      WHERE b.created_at >= @monthStart
-      ORDER BY b.created_at DESC
-    `, { monthStart });
+      WHERE b.archived = false AND b.statut_synthese = 'Besoin détecté'
+      ORDER BY b.date_identification DESC NULLS LAST, b.created_at DESC
+    `);
 
     const candidatsPositionnesMoisRows = await dbAll(`
       SELECT p.id, p.besoin_id, p.candidat_id, c.nom AS candidat_nom, c.prenom AS candidat_prenom, b.titre AS besoin_titre
