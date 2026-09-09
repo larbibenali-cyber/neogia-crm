@@ -3,6 +3,7 @@ const multer = require('multer');
 const { dbGet, dbAll, dbRun } = require('../../db/pg');
 const { paginate, toTagsArray } = require('../utils');
 const { uploadCv, downloadCv, deleteCv } = require('../storage');
+const { normalizeTechToken } = require('../../tech_taxonomy');
 
 const router = express.Router();
 
@@ -123,9 +124,16 @@ async function setTechnologies(candidatId, techNames) {
   for (const name of (techNames || [])) {
     const n = String(name).trim();
     if (!n) continue;
-    let t = await dbGet('SELECT * FROM technologies WHERE nom = ?', [n]);
+    // Classement automatique par domaine (cloud, langages, BI, ETL...) via la
+    // taxonomie technique — évite que toute nouvelle techno tombe par défaut dans
+    // « Autre », et regroupe les variantes de casse sous une entrée déjà connue.
+    const norm = normalizeTechToken(n);
+    const lookupName = norm && !norm.ignored ? norm.name : n;
+    let t = await dbGet('SELECT * FROM technologies WHERE lower(nom) = lower(?)', [lookupName]);
     if (!t) {
-      const row = await dbGet(`INSERT INTO technologies (nom, categorie, custom, usage_count, created_at) VALUES (?, 'autre', true, 0, now()) RETURNING id`, [n]);
+      const categorie = norm && !norm.ignored ? norm.category : 'autre';
+      const custom = norm && !norm.ignored ? !!norm.custom : true;
+      const row = await dbGet(`INSERT INTO technologies (nom, categorie, custom, usage_count, created_at) VALUES (?, ?, ?, 0, now()) RETURNING id`, [lookupName, categorie, custom]);
       t = { id: row.id };
     }
     await dbRun('INSERT INTO candidat_technologies (candidat_id, technology_id) VALUES (?, ?) ON CONFLICT DO NOTHING', [candidatId, t.id]);
