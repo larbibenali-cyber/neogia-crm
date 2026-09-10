@@ -10,6 +10,7 @@ import StatusBadge from '../../components/StatusBadge';
 import TechCloud from '../../components/TechCloud';
 import BesoinFormModal from '../../components/BesoinFormModal';
 import CandidatCombo from '../../components/CandidatCombo';
+import EntretienDateModal from '../../components/EntretienDateModal';
 import { usePickLists } from '../../lib/PickListsContext';
 import { useToast } from '../../lib/ToastContext';
 import { useConfirm } from '../../lib/ConfirmContext';
@@ -26,6 +27,7 @@ export default function BesoinDetail() {
   const [suggestions, setSuggestions] = useState(null);
   const [positionModal, setPositionModal] = useState({ open: false, candidat: null });
   const [etapeModal, setEtapeModal] = useState({ open: false, positionnement: null });
+  const [entretienModal, setEntretienModal] = useState({ open: false, positionnement: null, statut: null });
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -50,15 +52,17 @@ export default function BesoinDetail() {
   };
 
   const updatePositionStatus = async (p, statut) => {
+    if (ENTRETIEN_STATUTS.includes(statut)) {
+      // On ouvre directement une fenêtre pour indiquer la date (et l'heure) de
+      // l'entretien avant de valider le changement de statut, en un seul
+      // aller-retour — cette date alimente ensuite le diagramme « Activité du
+      // mois » du tableau de bord (barre « Entretiens planifiés »).
+      setEntretienModal({ open: true, positionnement: p, statut });
+      return;
+    }
     await api.put(`/positionnements/${p.id}`, { statut });
     toast('Statut du positionnement mis à jour.', 'success');
-    if (ENTRETIEN_STATUTS.includes(statut)) {
-      // Redirection automatique vers la fiche du candidat, onglet Entretien, pour
-      // renseigner la date et l'heure de l'entretien.
-      navigate(`/candidats/${p.candidat_id}`, { state: { tab: 'entretien', focusPositionId: p.id } });
-    } else {
-      load();
-    }
+    load();
   };
 
   const deletePositionnement = async (p) => {
@@ -247,6 +251,15 @@ export default function BesoinDetail() {
         open={etapeModal.open}
         positionnement={etapeModal.positionnement}
         onClose={() => setEtapeModal({ open: false, positionnement: null })}
+        onSaved={load}
+      />
+      <EntretienDateModal
+        open={entretienModal.open}
+        positionnement={entretienModal.positionnement}
+        statut={entretienModal.statut}
+        candidatLabel={entretienModal.positionnement ? `${entretienModal.positionnement.candidat_prenom} ${entretienModal.positionnement.candidat_nom}` : ''}
+        contextLabel={besoin.titre}
+        onClose={() => setEntretienModal({ open: false, positionnement: null, statut: null })}
         onSaved={load}
       />
     </div>
