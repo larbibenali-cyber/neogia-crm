@@ -186,18 +186,22 @@ router.get('/', async (req, res, next) => {
     `, { monthStart, monthEnd });
 
     // RDV pris (échanges de type « rendez_vous ») CE MOIS-CI, sur la base de
-    // date_echange (la date du RDV lui-même, saisie dans « Nouvel échange »)
-    // — alimente le diagramme dédié « RDV pris » du tableau de bord (distinct
-    // du diagramme « Activité du mois »).
+    // date_rdv — la date du RDV lui-même, saisie dans la fenêtre dédiée qui
+    // s'ouvre au choix du type « Rendez-vous » — et NON date_echange, qui reste
+    // la date à laquelle CET échange (l'appel, l'e-mail annonçant le RDV) a
+    // réellement eu lieu. Séparer les deux évite qu'un RDV prévu plus tard ne
+    // fasse apparaître l'échange lui-même comme daté dans le futur dans le
+    // journal des échanges. Alimente le diagramme dédié « RDV pris » du
+    // tableau de bord (distinct du diagramme « Activité du mois »).
     const rdvPrisMoisRows = await dbAll(`
-      SELECT ech.id, ech.date_echange, ech.objet, ech.compte_rendu, ech.contact_id,
+      SELECT ech.id, ech.date_echange, ech.date_rdv, ech.heure_rdv, ech.objet, ech.compte_rendu, ech.contact_id,
         c.nom AS contact_nom, c.prenom AS contact_prenom, e.nom AS entreprise_nom
       FROM echanges ech
       JOIN contacts c ON c.id = ech.contact_id
       JOIN entreprises e ON e.id = ech.entreprise_id
-      WHERE ech.type = 'rendez_vous' AND ech.date_echange IS NOT NULL
-        AND ech.date_echange >= @monthStart AND ech.date_echange < @monthEnd
-      ORDER BY ech.date_echange ASC
+      WHERE ech.type = 'rendez_vous' AND ech.date_rdv IS NOT NULL
+        AND ech.date_rdv >= @monthStart AND ech.date_rdv < @monthEnd
+      ORDER BY ech.date_rdv ASC, ech.heure_rdv ASC NULLS LAST
     `, { monthStart, monthEnd });
 
     // Comparaison « RDV pris » semaine après semaine, sur les 8 dernières
@@ -227,15 +231,15 @@ router.get('/', async (req, res, next) => {
     const rangeStart = weekStarts[0];
 
     const rdvPourSemainesRows = await dbAll(`
-      SELECT date_echange FROM echanges
-      WHERE type = 'rendez_vous' AND date_echange IS NOT NULL AND date_echange >= @rangeStart
+      SELECT date_rdv FROM echanges
+      WHERE type = 'rendez_vous' AND date_rdv IS NOT NULL AND date_rdv >= @rangeStart
     `, { rangeStart });
 
     const rdvParSemaine = weekStarts.map((ws) => {
       const weDate = new Date(`${ws}T00:00:00`);
       weDate.setDate(weDate.getDate() + 7);
       const we = weDate.toISOString().slice(0, 10);
-      const n = rdvPourSemainesRows.filter((r) => r.date_echange >= ws && r.date_echange < we).length;
+      const n = rdvPourSemainesRows.filter((r) => r.date_rdv >= ws && r.date_rdv < we).length;
       return { semaine_debut: ws, n };
     });
 
