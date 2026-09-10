@@ -85,6 +85,11 @@ CREATE TABLE IF NOT EXISTS echanges (
   -- lieu. Alimente le diagramme "RDV pris" du tableau de bord.
   date_rdv TEXT,
   heure_rdv TEXT,
+  -- Statut du RDV (prevu/realise/annule) — renseigné a posteriori depuis la liste
+  -- "RDV pris" du tableau de bord une fois le rendez-vous passé. Alimente le widget
+  -- distinct "RDV réalisés" : un RDV pris n'est pas automatiquement réalisé (le
+  -- client peut annuler).
+  statut_rdv TEXT NOT NULL DEFAULT 'prevu',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
