@@ -66,13 +66,20 @@ export default function EchangeFormModal({ open, onClose, onSaved, contactId, ec
   return (
     <Modal open={open} onClose={onClose} title={echange ? "Modifier l'échange" : 'Nouvel échange'} wide>
       <div className="grid grid-cols-2 gap-x-4">
-        <Field label="Date et heure" required><input type="datetime-local" className="input" value={form.date_echange || ''} onChange={set('date_echange')} /></Field>
+        <Field label={form.type === 'rendez_vous' ? 'Date et heure du RDV' : 'Date et heure'} required>
+          <input type="datetime-local" className="input" value={form.date_echange || ''} onChange={set('date_echange')} />
+        </Field>
         <Field label="Type">
           <Select value={form.type} onChange={set('type')}>
             {getOptions('echange_type').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </Select>
         </Field>
       </div>
+      {form.type === 'rendez_vous' && (
+        <p className="text-xs text-slate2-500 -mt-3 mb-4">
+          Ce RDV remontera dans le diagramme « RDV pris » du tableau de bord, à la date indiquée ci-dessus.
+        </p>
+      )}
       <Field label="Compte rendu" required>
         <textarea
           className="input"
