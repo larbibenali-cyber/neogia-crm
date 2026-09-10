@@ -44,6 +44,7 @@ INSERT INTO pick_lists (category, value, label, color, sort_order, active) VALUE
 INSERT INTO pick_lists (category, value, label, color, sort_order, active) VALUES ('echange_type', 'reunion', 'Réunion', '#A78BFA', 3, true) ON CONFLICT (category, value) DO NOTHING;
 INSERT INTO pick_lists (category, value, label, color, sort_order, active) VALUES ('echange_type', 'visio', 'Visioconférence', '#FBBF24', 4, true) ON CONFLICT (category, value) DO NOTHING;
 INSERT INTO pick_lists (category, value, label, color, sort_order, active) VALUES ('echange_type', 'autre', 'Autre', '#94A3B8', 5, true) ON CONFLICT (category, value) DO NOTHING;
+INSERT INTO pick_lists (category, value, label, color, sort_order, active) VALUES ('echange_type', 'rendez_vous', 'Rendez-vous', '#7C3AED', 6, true) ON CONFLICT (category, value) DO NOTHING;
 INSERT INTO pick_lists (category, value, label, color, sort_order, active) VALUES ('besoin_priorite', 'basse', 'Basse', '#94A3B8', 0, true) ON CONFLICT (category, value) DO NOTHING;
 INSERT INTO pick_lists (category, value, label, color, sort_order, active) VALUES ('besoin_priorite', 'normale', 'Normale', '#60A5FA', 1, true) ON CONFLICT (category, value) DO NOTHING;
 INSERT INTO pick_lists (category, value, label, color, sort_order, active) VALUES ('besoin_priorite', 'haute', 'Haute', '#FBBF24', 2, true) ON CONFLICT (category, value) DO NOTHING;
