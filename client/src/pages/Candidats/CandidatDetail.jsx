@@ -11,6 +11,7 @@ import StatusBadge from '../../components/StatusBadge';
 import TechCloud from '../../components/TechCloud';
 import CandidatFormModal from '../../components/CandidatFormModal';
 import BesoinCombo from '../../components/BesoinCombo';
+import EntretienDateModal from '../../components/EntretienDateModal';
 import { usePickLists } from '../../lib/PickListsContext';
 import { useToast } from '../../lib/ToastContext';
 import { useConfirm } from '../../lib/ConfirmContext';
@@ -30,6 +31,7 @@ export default function CandidatDetail() {
   const [uploading, setUploading] = useState(false);
   const [extraction, setExtraction] = useState(null);
   const [entretienFocusId, setEntretienFocusId] = useState(null);
+  const [entretienModal, setEntretienModal] = useState({ open: false, positionnement: null, statut: null });
   const fileInput = useRef(null);
   const toast = useToast();
   const confirm = useConfirm();
@@ -51,13 +53,17 @@ export default function CandidatDetail() {
   }, [location.state]);
 
   const updatePositionStatus = async (p, statut) => {
+    if (ENTRETIEN_STATUTS.includes(statut)) {
+      // On ouvre directement une fenêtre pour indiquer la date (et l'heure) de
+      // l'entretien avant de valider le changement de statut, en un seul
+      // aller-retour — cette date alimente ensuite le diagramme « Activité du
+      // mois » du tableau de bord (barre « Entretiens planifiés »).
+      setEntretienModal({ open: true, positionnement: p, statut });
+      return;
+    }
     await api.put(`/positionnements/${p.id}`, { statut });
     toast('Statut du positionnement mis à jour.', 'success');
     await load();
-    if (ENTRETIEN_STATUTS.includes(statut)) {
-      setTab('entretien');
-      setEntretienFocusId(p.id);
-    }
   };
 
   if (error) return <EmptyState title="Impossible de charger le candidat" description={error} />;
@@ -317,6 +323,21 @@ export default function CandidatDetail() {
           <ExtractionReview extraction={extraction} onValidate={applyExtraction} onCancel={() => setExtraction(null)} />
         )}
       </Modal>
+
+      <EntretienDateModal
+        open={entretienModal.open}
+        positionnement={entretienModal.positionnement}
+        statut={entretienModal.statut}
+        candidatLabel={`${candidat.prenom} ${candidat.nom}`}
+        contextLabel={entretienModal.positionnement ? `${entretienModal.positionnement.besoin_titre} — ${entretienModal.positionnement.entreprise_nom}` : ''}
+        onClose={() => setEntretienModal({ open: false, positionnement: null, statut: null })}
+        onSaved={async () => {
+          const savedId = entretienModal.positionnement?.id;
+          await load();
+          setTab('entretien');
+          setEntretienFocusId(savedId);
+        }}
+      />
     </div>
   );
 }
