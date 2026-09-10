@@ -172,7 +172,7 @@ function RdvSemaineModal({ open, onClose, rdvPris }) {
               <DrillDownRow
                 to={`/clients/contact/${item.contact_id}`}
                 primary={`${item.contact_prenom} ${item.contact_nom}`}
-                secondary={`${item.entreprise_nom} — ${formatDate(item.date_echange, true)}`}
+                secondary={`${item.entreprise_nom} — RDV le ${formatDate(item.date_rdv)}${item.heure_rdv ? ` à ${item.heure_rdv}` : ''}`}
               />
             </li>
           ))}
