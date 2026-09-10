@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Building2, UserSquare2, Briefcase, BarChart3, Plus,
-  UserPlus, FilePlus2, Target, Clock, TrendingUp, ArrowRight, CalendarCheck,
+  UserPlus, FilePlus2, Target, Clock, TrendingUp, ArrowRight, CalendarCheck, CheckCircle2,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Loading, Modal } from '../components/ui';
 import StatusBadge from '../components/StatusBadge';
 import { timeAgo, formatDate } from '../lib/format';
+import { useToast } from '../lib/ToastContext';
 
 function StatCard({ icon: Icon, label, value, color, onClick }) {
   return (
@@ -107,15 +108,14 @@ function shortDayMonth(iso) {
 // Diagramme en bâtons « RDV pris » semaine après semaine (8 dernières semaines,
 // lundi -> dimanche, semaine en cours incluse) — affiché dans la modale de détail
 // du widget « RDV pris » du tableau de bord, pour une comparaison visuelle directe.
-function WeeklyRdvChart({ data }) {
+function WeeklyRdvChart({ data, color = '#7C3AED', label = 'RDV pris' }) {
   const BAR_H = 110;
-  const color = '#7C3AED';
   const max = Math.max(1, ...data.map((d) => d.n));
   return (
     <div>
       <div className="flex items-end justify-around gap-2 px-1 pb-3 border-b border-slate2-200">
         {data.map((d) => (
-          <div key={d.semaine_debut} className="flex flex-col items-center flex-1" title={`Semaine du ${shortDayMonth(d.semaine_debut)} : ${d.n} RDV pris`}>
+          <div key={d.semaine_debut} className="flex flex-col items-center flex-1" title={`Semaine du ${shortDayMonth(d.semaine_debut)} : ${d.n} ${label}`}>
             <span className="text-xs font-heading font-semibold text-slate2-900 mb-1.5">{d.n}</span>
             <div
               className="w-full max-w-[36px] rounded-t-lg transition-all duration-500"
@@ -129,6 +129,55 @@ function WeeklyRdvChart({ data }) {
           <span key={d.semaine_debut} className="flex-1 text-center text-[11px] text-slate2-500">{shortDayMonth(d.semaine_debut)}</span>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Boutons "Prévu / Réalisé / Annulé" affichés sur chaque ligne de RDV dans les
+// listes de détail — un RDV pris n'est pas automatiquement réalisé (le client
+// peut annuler), d'où ce statut distinct saisi a posteriori une fois la date
+// du RDV passée. e.stopPropagation() empêche le clic sur un bouton de
+// déclencher la navigation vers la fiche contact portée par la ligne.
+function RdvStatutControl({ statut, onChange }) {
+  const cur = statut || 'prevu';
+  const OPTIONS = [
+    { value: 'prevu', label: 'Prévu', activeClass: 'bg-slate2-200 text-slate2-700' },
+    { value: 'realise', label: 'Réalisé', activeClass: 'bg-emerald-100 text-emerald-700' },
+    { value: 'annule', label: 'Annulé', activeClass: 'bg-rose-100 text-rose-700' },
+  ];
+  return (
+    <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+      {OPTIONS.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          onClick={() => onChange(o.value)}
+          className={`text-[11px] px-2 py-1 rounded-full transition-colors whitespace-nowrap ${cur === o.value ? o.activeClass : 'bg-slate2-50 text-slate2-400 hover:bg-slate2-100'}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Ligne d'une liste de RDV (utilisée par les deux modales "RDV pris" et "RDV
+// réalisés") : nom + société + date cliquables vers la fiche contact, plus le
+// contrôle de statut ci-dessus. Volontairement pas un <Link> englobant toute
+// la ligne (comme DrillDownRow) puisqu'il doit contenir d'autres boutons.
+function RdvListRow({ item, onStatutChange }) {
+  const annule = item.statut_rdv === 'annule';
+  return (
+    <div className="flex items-center justify-between gap-3 -mx-1 px-3 py-2 rounded-lg hover:bg-brand-50 transition-colors group">
+      <Link to={`/clients/contact/${item.contact_id}`} className="min-w-0 flex-1">
+        <span className={`text-sm truncate block group-hover:text-brand ${annule ? 'text-slate2-400 line-through' : 'text-slate2-800'}`}>
+          {item.contact_prenom} {item.contact_nom}
+          <span className="text-slate2-400 font-normal">
+            {' '}— {item.entreprise_nom} — RDV le {formatDate(item.date_rdv)}{item.heure_rdv ? ` à ${item.heure_rdv}` : ''}
+          </span>
+        </span>
+      </Link>
+      <RdvStatutControl statut={item.statut_rdv} onChange={(v) => onStatutChange(item, v)} />
     </div>
   );
 }
@@ -156,7 +205,29 @@ function RdvPrisCard({ rdvPris, onOpen }) {
   );
 }
 
-function RdvSemaineModal({ open, onClose, rdvPris }) {
+// Widget « RDV réalisés » — affiché sous « RDV pris » : un sous-ensemble de ce
+// total, marqué au fil de l'eau depuis la liste "RDV pris" une fois chaque
+// rendez-vous passé (tout RDV pris n'est pas réalisé : annulations client...).
+function RdvRealisesCard({ rdvRealises, onOpen }) {
+  const mois = rdvRealises?.mois || 0;
+  return (
+    <button
+      onClick={onOpen}
+      className="card p-5 w-full text-left hover:shadow-card-hover hover:-translate-y-0.5 transition-all cursor-pointer"
+    >
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="font-heading font-semibold text-slate2-900 flex items-center gap-2">
+          <CheckCircle2 size={18} className="text-brand" /> RDV réalisés
+        </h2>
+        <ArrowRight size={14} className="text-slate2-300" />
+      </div>
+      <p className="text-xs text-slate2-500 mb-3">Ce mois-ci — cliquez pour voir la comparaison semaine après semaine</p>
+      <div className="text-3xl font-heading font-semibold" style={{ color: '#059669' }}>{mois}</div>
+    </button>
+  );
+}
+
+function RdvSemaineModal({ open, onClose, rdvPris, onStatutChange }) {
   const details = rdvPris?.mois_details || [];
   const parSemaine = rdvPris?.par_semaine || [];
   return (
@@ -164,16 +235,35 @@ function RdvSemaineModal({ open, onClose, rdvPris }) {
       <p className="text-xs text-slate2-500 mb-4">8 dernières semaines (lundi → dimanche, semaine en cours incluse)</p>
       <WeeklyRdvChart data={parSemaine} />
       <h3 className="text-sm font-semibold text-slate2-700 mt-6 mb-2">RDV pris ce mois-ci ({details.length})</h3>
+      <p className="text-xs text-slate2-500 mb-2">Marquez chaque RDV une fois passé — c'est ce qui alimente le widget « RDV réalisés ».</p>
       {details.length === 0 && <p className="text-sm text-slate2-400">Aucun RDV pris ce mois-ci.</p>}
       {details.length > 0 && (
         <ul className="divide-y divide-slate2-100 max-h-[40vh] overflow-y-auto -mx-1">
           {details.map((item) => (
             <li key={item.id} className="py-1">
-              <DrillDownRow
-                to={`/clients/contact/${item.contact_id}`}
-                primary={`${item.contact_prenom} ${item.contact_nom}`}
-                secondary={`${item.entreprise_nom} — RDV le ${formatDate(item.date_rdv)}${item.heure_rdv ? ` à ${item.heure_rdv}` : ''}`}
-              />
+              <RdvListRow item={item} onStatutChange={onStatutChange} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
+  );
+}
+
+function RdvRealisesModal({ open, onClose, rdvRealises, onStatutChange }) {
+  const details = rdvRealises?.mois_details || [];
+  const parSemaine = rdvRealises?.par_semaine || [];
+  return (
+    <Modal open={open} onClose={onClose} title="RDV réalisés — comparaison hebdomadaire">
+      <p className="text-xs text-slate2-500 mb-4">8 dernières semaines (lundi → dimanche, semaine en cours incluse)</p>
+      <WeeklyRdvChart data={parSemaine} color="#059669" label="RDV réalisés" />
+      <h3 className="text-sm font-semibold text-slate2-700 mt-6 mb-2">RDV réalisés ce mois-ci ({details.length})</h3>
+      {details.length === 0 && <p className="text-sm text-slate2-400">Aucun RDV réalisé ce mois-ci.</p>}
+      {details.length > 0 && (
+        <ul className="divide-y divide-slate2-100 max-h-[40vh] overflow-y-auto -mx-1">
+          {details.map((item) => (
+            <li key={item.id} className="py-1">
+              <RdvListRow item={item} onStatutChange={onStatutChange} />
             </li>
           ))}
         </ul>
@@ -198,17 +288,33 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
   const [drillDown, setDrillDown] = useState(null); // { key, label } | null
   const [rdvModalOpen, setRdvModalOpen] = useState(false);
+  const [rdvRealisesModalOpen, setRdvRealisesModalOpen] = useState(false);
   const navigate = useNavigate();
+  const toast = useToast();
 
   useEffect(() => {
     api.get('/dashboard').then(setData).catch((e) => setError(e.message || 'Impossible de charger le tableau de bord.'));
   }, []);
 
+  // Met à jour le statut d'un RDV (prévu/réalisé/annulé) depuis une des deux
+  // listes de détail, puis recharge le tableau de bord entier : les deux
+  // widgets RDV pris/RDV réalisés (totaux + comparaison hebdomadaire) en
+  // dépendent tous les deux et doivent rester cohérents entre eux.
+  const updateStatutRdv = async (item, statut_rdv) => {
+    try {
+      await api.put(`/echanges/${item.id}`, { statut_rdv });
+      const fresh = await api.get('/dashboard');
+      setData(fresh);
+    } catch (err) {
+      toast(err.message || "Impossible de mettre à jour le statut du RDV.", 'error');
+    }
+  };
+
   if (error) return <div className="card p-8 text-center text-slate2-500">{error}</div>;
   if (!data) return <Loading />;
   const {
     totaux, besoins_en_cours, derniers_echanges, dernieres_fiches, besoins_par_statut,
-    besoins_prioritaires, candidats_positionnes_recemment, activite_mois, activite_mois_details, rdv_pris,
+    besoins_prioritaires, candidats_positionnes_recemment, activite_mois, activite_mois_details, rdv_pris, rdv_realises,
   } = data;
   const maxStatut = Math.max(1, ...besoins_par_statut.map((b) => b.n));
   const activiteMoisData = [
@@ -303,7 +409,10 @@ export default function Dashboard() {
         <div className="lg:col-span-2">
           <ActivityBarChart data={activiteMoisData} onBarClick={(d) => setDrillDown({ key: d.key, label: d.label })} />
         </div>
-        <RdvPrisCard rdvPris={rdv_pris} onOpen={() => setRdvModalOpen(true)} />
+        <div className="flex flex-col gap-5">
+          <RdvPrisCard rdvPris={rdv_pris} onOpen={() => setRdvModalOpen(true)} />
+          <RdvRealisesCard rdvRealises={rdv_realises} onOpen={() => setRdvRealisesModalOpen(true)} />
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-5">
@@ -406,7 +515,8 @@ export default function Dashboard() {
         renderItem={renderDrillDownItem}
       />
 
-      <RdvSemaineModal open={rdvModalOpen} onClose={() => setRdvModalOpen(false)} rdvPris={rdv_pris} />
+      <RdvSemaineModal open={rdvModalOpen} onClose={() => setRdvModalOpen(false)} rdvPris={rdv_pris} onStatutChange={updateStatutRdv} />
+      <RdvRealisesModal open={rdvRealisesModalOpen} onClose={() => setRdvRealisesModalOpen(false)} rdvRealises={rdv_realises} onStatutChange={updateStatutRdv} />
     </div>
   );
 }
