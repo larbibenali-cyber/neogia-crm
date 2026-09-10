@@ -80,6 +80,11 @@ CREATE TABLE IF NOT EXISTS echanges (
   auteur TEXT,
   source_import BOOLEAN NOT NULL DEFAULT false,
   dedup_hash TEXT,
+  -- Date/heure du RDV lui-même (type = 'rendez_vous'), distincte de date_echange
+  -- qui reste la date à laquelle CET échange (l'appel/l'e-mail) a réellement eu
+  -- lieu. Alimente le diagramme "RDV pris" du tableau de bord.
+  date_rdv TEXT,
+  heure_rdv TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
