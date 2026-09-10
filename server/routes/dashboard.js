@@ -194,7 +194,7 @@ router.get('/', async (req, res, next) => {
     // journal des échanges. Alimente le diagramme dédié « RDV pris » du
     // tableau de bord (distinct du diagramme « Activité du mois »).
     const rdvPrisMoisRows = await dbAll(`
-      SELECT ech.id, ech.date_echange, ech.date_rdv, ech.heure_rdv, ech.objet, ech.compte_rendu, ech.contact_id,
+      SELECT ech.id, ech.date_echange, ech.date_rdv, ech.heure_rdv, ech.statut_rdv, ech.objet, ech.compte_rendu, ech.contact_id,
         c.nom AS contact_nom, c.prenom AS contact_prenom, e.nom AS entreprise_nom
       FROM echanges ech
       JOIN contacts c ON c.id = ech.contact_id
@@ -204,12 +204,18 @@ router.get('/', async (req, res, next) => {
       ORDER BY ech.date_rdv ASC, ech.heure_rdv ASC NULLS LAST
     `, { monthStart, monthEnd });
 
+    // RDV « réalisés » — sous-ensemble des RDV pris du mois dont le statut a été
+    // positionné sur 'realise' depuis la liste "RDV pris" du tableau de bord, une
+    // fois le rendez-vous passé. Volontairement distinct du total "RDV pris" : un
+    // RDV pris n'est pas automatiquement réalisé (annulation client, etc.).
+    const rdvRealisesMoisRows = rdvPrisMoisRows.filter((r) => r.statut_rdv === 'realise');
+
     // Comparaison « RDV pris » semaine après semaine, sur les 8 dernières
     // semaines (lundi -> dimanche, semaine courante incluse) : c'est ce qui
     // alimente les diagrammes affichés quand on entre dans le widget « RDV
     // pris » du tableau de bord. On calcule les bornes de semaines en JS (plus
     // simple et plus sûr que de manipuler date_trunc('week', ...) sur des
-    // dates stockées en TEXT), puis on répartit en mémoire les échanges
+    // dates stockées en TEXT), puis on répartit en mêmoire les échanges
     // récupérés sur la période totale — ce qui permet aussi de faire
     // apparaître les semaines à 0 RDV (indispensable pour une vraie
     // comparaison semaine après semaine).
@@ -231,7 +237,7 @@ router.get('/', async (req, res, next) => {
     const rangeStart = weekStarts[0];
 
     const rdvPourSemainesRows = await dbAll(`
-      SELECT date_rdv FROM echanges
+      SELECT date_rdv, statut_rdv FROM echanges
       WHERE type = 'rendez_vous' AND date_rdv IS NOT NULL AND date_rdv >= @rangeStart
     `, { rangeStart });
 
@@ -240,6 +246,17 @@ router.get('/', async (req, res, next) => {
       weDate.setDate(weDate.getDate() + 7);
       const we = weDate.toISOString().slice(0, 10);
       const n = rdvPourSemainesRows.filter((r) => r.date_rdv >= ws && r.date_rdv < we).length;
+      return { semaine_debut: ws, n };
+    });
+
+    // Même comparaison hebdomadaire, restreinte aux RDV marqués « réalisé » —
+    // alimente le diagramme du widget "RDV réalisés" du tableau de bord.
+    const rdvRealisesRowsSemaines = rdvPourSemainesRows.filter((r) => r.statut_rdv === 'realise');
+    const rdvRealisesParSemaine = weekStarts.map((ws) => {
+      const weDate = new Date(`${ws}T00:00:00`);
+      weDate.setDate(weDate.getDate() + 7);
+      const we = weDate.toISOString().slice(0, 10);
+      const n = rdvRealisesRowsSemaines.filter((r) => r.date_rdv >= ws && r.date_rdv < we).length;
       return { semaine_debut: ws, n };
     });
 
@@ -273,6 +290,11 @@ router.get('/', async (req, res, next) => {
         mois: rdvPrisMoisRows.length,
         mois_details: rdvPrisMoisRows,
         par_semaine: rdvParSemaine,
+      },
+      rdv_realises: {
+        mois: rdvRealisesMoisRows.length,
+        mois_details: rdvRealisesMoisRows,
+        par_semaine: rdvRealisesParSemaine,
       },
     });
   } catch (err) { next(err); }
