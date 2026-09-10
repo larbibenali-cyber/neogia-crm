@@ -3,6 +3,8 @@ import { Modal, Field, Select } from './ui';
 import { usePickLists } from '../lib/PickListsContext';
 import { useToast } from '../lib/ToastContext';
 import { api } from '../lib/api';
+import RdvDateModal from './RdvDateModal';
+import { formatDate } from '../lib/format';
 
 // Format une Date en "YYYY-MM-DDTHH:MM" en heure LOCALE (contrairement à
 // toISOString() qui convertit en UTC) — c'est le format attendu par un
@@ -20,7 +22,10 @@ function toDatetimeInputValue(v) {
   return v.includes('T') ? v.slice(0, 16) : `${v}T00:00`;
 }
 
-const EMPTY = { date_echange: toLocalDatetimeInput(new Date()), type: 'appel', objet: '', compte_rendu: '', prochaine_action: '', date_relance: '', auteur: 'Administrateur Neogia' };
+const EMPTY = {
+  date_echange: toLocalDatetimeInput(new Date()), type: 'appel', objet: '', compte_rendu: '', prochaine_action: '',
+  date_relance: '', auteur: 'Administrateur Neogia', date_rdv: '', heure_rdv: '',
+};
 // Conservé et exporté pour compatibilité (ex. filtre "Objet" du Journal des
 // échanges, qui retrouve les échanges déjà enregistrés sous ces objets) —
 // le champ "Objet / titre" n'est en revanche plus proposé dans ce formulaire
@@ -30,6 +35,7 @@ export const OBJET_PRESETS = ['Appel', 'Mail', 'Rendez-vous'];
 export default function EchangeFormModal({ open, onClose, onSaved, contactId, echange }) {
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
+  const [rdvModalOpen, setRdvModalOpen] = useState(false);
   const { getOptions } = usePickLists();
   const toast = useToast();
 
@@ -49,8 +55,23 @@ export default function EchangeFormModal({ open, onClose, onSaved, contactId, ec
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  // Choisir "Rendez-vous" ouvre aussitôt la fenêtre dédiée à la date du RDV —
+  // sur le même principe que la fenêtre "Entretien planifié" côté candidats —
+  // plutôt que de réutiliser la date de l'échange lui-même.
+  const setType = (e) => {
+    const value = e.target.value;
+    setForm((f) => ({ ...f, type: value }));
+    if (value === 'rendez_vous') setRdvModalOpen(true);
+  };
+
+  const saveRdvDate = (date_rdv, heure_rdv) => setForm((f) => ({ ...f, date_rdv, heure_rdv }));
+
   const submit = async () => {
     if (!form.compte_rendu) return toast('Merci de renseigner un compte-rendu.', 'error');
+    if (form.type === 'rendez_vous' && !form.date_rdv) {
+      setRdvModalOpen(true);
+      return toast('Merci d’indiquer la date du RDV.', 'error');
+    }
     setSaving(true);
     try {
       if (echange) await api.put(`/echanges/${echange.id}`, form);
@@ -64,20 +85,28 @@ export default function EchangeFormModal({ open, onClose, onSaved, contactId, ec
   };
 
   return (
+    <>
     <Modal open={open} onClose={onClose} title={echange ? "Modifier l'échange" : 'Nouvel échange'} wide>
       <div className="grid grid-cols-2 gap-x-4">
-        <Field label={form.type === 'rendez_vous' ? 'Date et heure du RDV' : 'Date et heure'} required>
+        <Field label="Date et heure" required hint="Date à laquelle cet échange a réellement eu lieu">
           <input type="datetime-local" className="input" value={form.date_echange || ''} onChange={set('date_echange')} />
         </Field>
         <Field label="Type">
-          <Select value={form.type} onChange={set('type')}>
+          <Select value={form.type} onChange={setType}>
             {getOptions('echange_type').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </Select>
         </Field>
       </div>
       {form.type === 'rendez_vous' && (
         <p className="text-xs text-slate2-500 -mt-3 mb-4">
-          Ce RDV remontera dans le diagramme « RDV pris » du tableau de bord, à la date indiquée ci-dessus.
+          {form.date_rdv ? (
+            <>RDV prévu le {formatDate(form.date_rdv)}{form.heure_rdv ? ` à ${form.heure_rdv}` : ''} — </>
+          ) : (
+            <>Aucune date de RDV renseignée — </>
+          )}
+          <button type="button" className="text-brand underline" onClick={() => setRdvModalOpen(true)}>
+            {form.date_rdv ? 'modifier' : 'indiquer la date du RDV'}
+          </button>
         </p>
       )}
       <Field label="Compte rendu" required>
@@ -97,5 +126,14 @@ export default function EchangeFormModal({ open, onClose, onSaved, contactId, ec
         <button className="btn btn-primary" disabled={saving} onClick={submit}>{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
       </div>
     </Modal>
+
+    <RdvDateModal
+      open={rdvModalOpen}
+      dateRdv={form.date_rdv}
+      heureRdv={form.heure_rdv}
+      onClose={() => setRdvModalOpen(false)}
+      onSave={saveRdvDate}
+    />
+    </>
   );
 }
