@@ -16,6 +16,7 @@ router.get('/', async (req, res, next) => {
     const in14 = new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString().slice(0, 10);
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().slice(0, 10);
 
     // Besoins « détectés » (statut_synthese = 'Besoin détecté'), triés par degré d'urgence
     // décroissant (urgente > haute > normale > basse) puis par date de démarrage —
@@ -168,6 +169,22 @@ router.get('/', async (req, res, next) => {
       ORDER BY date_etape DESC
     `, { monthStart });
 
+    // Entretiens « planifiés » à venir/passés CE MOIS-CI — contrairement aux deux
+    // requêtes précédentes (qui filtrent sur la date de l'ACTION en base), on filtre
+    // ici sur p.date_entretien, la date de l'entretien elle-même renseignée dans la
+    // fenêtre « Entretien planifié » : c'est cette date-là que l'on veut voir remonter
+    // dans le diagramme, pas la date à laquelle le statut a été changé.
+    const entretiensPlanifiesMoisRows = await dbAll(`
+      SELECT p.id AS positionnement_id, p.besoin_id, p.candidat_id, c.nom AS candidat_nom, c.prenom AS candidat_prenom,
+        b.titre AS besoin_titre, p.date_entretien, p.heure_entretien
+      FROM positionnements p
+      JOIN candidats c ON c.id = p.candidat_id
+      JOIN besoins b ON b.id = p.besoin_id
+      WHERE p.statut = 'entretien_planifie' AND p.date_entretien IS NOT NULL
+        AND p.date_entretien >= @monthStart AND p.date_entretien < @monthEnd
+      ORDER BY p.date_entretien ASC, p.heure_entretien ASC NULLS LAST
+    `, { monthStart, monthEnd });
+
     res.json({
       totaux: { entreprises: totalEntreprises, contacts: totalContacts, candidats: totalCandidats, besoins_ouverts: besoinsOuverts },
       besoins_en_cours: besoinsEnCours,
@@ -186,11 +203,13 @@ router.get('/', async (req, res, next) => {
         besoins_detectes: besoinsDetectesMoisRows.length,
         candidats_positionnes: candidatsPositionnesMoisRows.length,
         entretiens_realises: entretiensRealisesMoisRows.length,
+        entretiens_planifies: entretiensPlanifiesMoisRows.length,
       },
       activite_mois_details: {
         besoins_detectes: besoinsDetectesMoisRows,
         candidats_positionnes: candidatsPositionnesMoisRows,
         entretiens_realises: entretiensRealisesMoisRows,
+        entretiens_planifies: entretiensPlanifiesMoisRows,
       },
     });
   } catch (err) { next(err); }
