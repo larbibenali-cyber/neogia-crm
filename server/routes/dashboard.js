@@ -185,6 +185,60 @@ router.get('/', async (req, res, next) => {
       ORDER BY p.date_entretien ASC, p.heure_entretien ASC NULLS LAST
     `, { monthStart, monthEnd });
 
+    // RDV pris (échanges de type « rendez_vous ») CE MOIS-CI, sur la base de
+    // date_echange (la date du RDV lui-même, saisie dans « Nouvel échange »)
+    // — alimente le diagramme dédié « RDV pris » du tableau de bord (distinct
+    // du diagramme « Activité du mois »).
+    const rdvPrisMoisRows = await dbAll(`
+      SELECT ech.id, ech.date_echange, ech.objet, ech.compte_rendu, ech.contact_id,
+        c.nom AS contact_nom, c.prenom AS contact_prenom, e.nom AS entreprise_nom
+      FROM echanges ech
+      JOIN contacts c ON c.id = ech.contact_id
+      JOIN entreprises e ON e.id = ech.entreprise_id
+      WHERE ech.type = 'rendez_vous' AND ech.date_echange IS NOT NULL
+        AND ech.date_echange >= @monthStart AND ech.date_echange < @monthEnd
+      ORDER BY ech.date_echange ASC
+    `, { monthStart, monthEnd });
+
+    // Comparaison « RDV pris » semaine après semaine, sur les 8 dernières
+    // semaines (lundi -> dimanche, semaine courante incluse) : c'est ce qui
+    // alimente les diagrammes affichés quand on entre dans le widget « RDV
+    // pris » du tableau de bord. On calcule les bornes de semaines en JS (plus
+    // simple et plus sûr que de manipuler date_trunc('week', ...) sur des
+    // dates stockées en TEXT), puis on répartit en mémoire les échanges
+    // récupérés sur la période totale — ce qui permet aussi de faire
+    // apparaître les semaines à 0 RDV (indispensable pour une vraie
+    // comparaison semaine après semaine).
+    const WEEKS_BACK = 8;
+    const mondayOf = (d) => {
+      const date = new Date(d);
+      const day = date.getDay(); // 0=dimanche, 1=lundi, ...
+      const diff = day === 0 ? -6 : 1 - day;
+      date.setDate(date.getDate() + diff);
+      date.setHours(0, 0, 0, 0);
+      return date;
+    };
+    const currentMonday = mondayOf(now);
+    const weekStarts = Array.from({ length: WEEKS_BACK }, (_, i) => {
+      const d = new Date(currentMonday);
+      d.setDate(d.getDate() - (WEEKS_BACK - 1 - i) * 7);
+      return d.toISOString().slice(0, 10);
+    });
+    const rangeStart = weekStarts[0];
+
+    const rdvPourSemainesRows = await dbAll(`
+      SELECT date_echange FROM echanges
+      WHERE type = 'rendez_vous' AND date_echange IS NOT NULL AND date_echange >= @rangeStart
+    `, { rangeStart });
+
+    const rdvParSemaine = weekStarts.map((ws) => {
+      const weDate = new Date(`${ws}T00:00:00`);
+      weDate.setDate(weDate.getDate() + 7);
+      const we = weDate.toISOString().slice(0, 10);
+      const n = rdvPourSemainesRows.filter((r) => r.date_echange >= ws && r.date_echange < we).length;
+      return { semaine_debut: ws, n };
+    });
+
     res.json({
       totaux: { entreprises: totalEntreprises, contacts: totalContacts, candidats: totalCandidats, besoins_ouverts: besoinsOuverts },
       besoins_en_cours: besoinsEnCours,
@@ -210,6 +264,11 @@ router.get('/', async (req, res, next) => {
         candidats_positionnes: candidatsPositionnesMoisRows,
         entretiens_realises: entretiensRealisesMoisRows,
         entretiens_planifies: entretiensPlanifiesMoisRows,
+      },
+      rdv_pris: {
+        mois: rdvPrisMoisRows.length,
+        mois_details: rdvPrisMoisRows,
+        par_semaine: rdvParSemaine,
       },
     });
   } catch (err) { next(err); }
