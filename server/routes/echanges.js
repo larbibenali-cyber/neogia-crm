@@ -37,10 +37,10 @@ router.post('/contacts/:contactId/echanges', async (req, res, next) => {
     const row = await dbGet(`
       INSERT INTO echanges (
         contact_id, entreprise_id, date_echange, date_approximative, type, objet, compte_rendu,
-        prochaine_action, date_relance, auteur, source_import, dedup_hash, date_rdv, heure_rdv, created_at, updated_at
+        prochaine_action, date_relance, auteur, source_import, dedup_hash, date_rdv, heure_rdv, statut_rdv, created_at, updated_at
       ) VALUES (
         @contact_id, @entreprise_id, @date_echange, false, @type, @objet, @compte_rendu,
-        @prochaine_action, @date_relance, @auteur, false, @dedup_hash, @date_rdv, @heure_rdv, now(), now()
+        @prochaine_action, @date_relance, @auteur, false, @dedup_hash, @date_rdv, @heure_rdv, @statut_rdv, now(), now()
       ) RETURNING id
     `, {
       contact_id: contact.id,
@@ -59,6 +59,11 @@ router.post('/contacts/:contactId/echanges', async (req, res, next) => {
       // c'est ce couple qui alimente le diagramme "RDV pris" du tableau de bord.
       date_rdv: b.date_rdv || null,
       heure_rdv: b.heure_rdv || null,
+      // Statut du RDV — prevu (par défaut) / realise / annule — renseigné a posteriori
+      // depuis la liste "RDV pris" du tableau de bord une fois le RDV passé. Alimente
+      // le widget distinct "RDV réalisés" (un RDV pris n'est pas toujours réalisé :
+      // certains sont annulés par le client).
+      statut_rdv: b.statut_rdv || 'prevu',
     });
     await dbRun(`UPDATE contacts SET dernier_echange_at = @d, updated_at = now() WHERE id = @id AND (dernier_echange_at IS NULL OR dernier_echange_at < @d)`,
       { d: dateEchange, id: contact.id });
@@ -73,7 +78,8 @@ router.put('/echanges/:id', async (req, res, next) => {
     const b = req.body;
     await dbRun(`
       UPDATE echanges SET date_echange=@date_echange, type=@type, objet=@objet, compte_rendu=@compte_rendu,
-        prochaine_action=@prochaine_action, date_relance=@date_relance, date_rdv=@date_rdv, heure_rdv=@heure_rdv, updated_at=now()
+        prochaine_action=@prochaine_action, date_relance=@date_relance, date_rdv=@date_rdv, heure_rdv=@heure_rdv,
+        statut_rdv=@statut_rdv, updated_at=now()
       WHERE id=@id
     `, {
       id: req.params.id,
@@ -85,6 +91,10 @@ router.put('/echanges/:id', async (req, res, next) => {
       date_relance: b.date_relance ?? existing.date_relance,
       date_rdv: b.date_rdv ?? existing.date_rdv,
       heure_rdv: b.heure_rdv ?? existing.heure_rdv,
+      // Permet à la liste "RDV pris"/"RDV réalisés" du tableau de bord de ne mettre
+      // à jour QUE le statut (PUT /echanges/:id avec { statut_rdv }) sans repasser
+      // par le formulaire complet.
+      statut_rdv: b.statut_rdv ?? existing.statut_rdv,
     });
     res.json(await dbGet('SELECT * FROM echanges WHERE id = ?', [req.params.id]));
   } catch (err) { next(err); }
