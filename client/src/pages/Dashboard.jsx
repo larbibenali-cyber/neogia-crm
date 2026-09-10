@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Building2, UserSquare2, Briefcase, BarChart3, Plus,
-  UserPlus, FilePlus2, Target, Clock, TrendingUp, ArrowRight,
+  UserPlus, FilePlus2, Target, Clock, TrendingUp, ArrowRight, CalendarCheck,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Loading, Modal } from '../components/ui';
@@ -96,6 +96,92 @@ function DrillDownRow({ to, primary, secondary }) {
   );
 }
 
+// Mini-format "jj/mm" pour les repères de semaine du diagramme RDV pris — un
+// formatDate() complet (jj/mm/aaaa) serait trop large pour 8 barres côte à côte.
+function shortDayMonth(iso) {
+  const d = new Date(`${iso}T00:00:00`);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+}
+
+// Diagramme en bâtons « RDV pris » semaine après semaine (8 dernières semaines,
+// lundi -> dimanche, semaine en cours incluse) — affiché dans la modale de détail
+// du widget « RDV pris » du tableau de bord, pour une comparaison visuelle directe.
+function WeeklyRdvChart({ data }) {
+  const BAR_H = 110;
+  const color = '#7C3AED';
+  const max = Math.max(1, ...data.map((d) => d.n));
+  return (
+    <div>
+      <div className="flex items-end justify-around gap-2 px-1 pb-3 border-b border-slate2-200">
+        {data.map((d) => (
+          <div key={d.semaine_debut} className="flex flex-col items-center flex-1" title={`Semaine du ${shortDayMonth(d.semaine_debut)} : ${d.n} RDV pris`}>
+            <span className="text-xs font-heading font-semibold text-slate2-900 mb-1.5">{d.n}</span>
+            <div
+              className="w-full max-w-[36px] rounded-t-lg transition-all duration-500"
+              style={{ height: Math.max(4, Math.round((d.n / max) * BAR_H)), background: color }}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-around gap-2 px-1 mt-2">
+        {data.map((d) => (
+          <span key={d.semaine_debut} className="flex-1 text-center text-[11px] text-slate2-500">{shortDayMonth(d.semaine_debut)}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Widget dédié « RDV pris » — distinct du diagramme « Activité du mois » : le
+// total du mois est affiché directement sur la carte, et un clic ouvre une
+// modale avec le détail semaine après semaine (WeeklyRdvChart) ainsi que la
+// liste des RDV du mois, chacun cliquable vers la fiche contact correspondante.
+function RdvPrisCard({ rdvPris, onOpen }) {
+  const mois = rdvPris?.mois || 0;
+  return (
+    <button
+      onClick={onOpen}
+      className="card p-5 w-full text-left hover:shadow-card-hover hover:-translate-y-0.5 transition-all cursor-pointer"
+    >
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="font-heading font-semibold text-slate2-900 flex items-center gap-2">
+          <CalendarCheck size={18} className="text-brand" /> RDV pris
+        </h2>
+        <ArrowRight size={14} className="text-slate2-300" />
+      </div>
+      <p className="text-xs text-slate2-500 mb-3">Ce mois-ci — cliquez pour voir la comparaison semaine après semaine</p>
+      <div className="text-3xl font-heading font-semibold" style={{ color: '#7C3AED' }}>{mois}</div>
+    </button>
+  );
+}
+
+function RdvSemaineModal({ open, onClose, rdvPris }) {
+  const details = rdvPris?.mois_details || [];
+  const parSemaine = rdvPris?.par_semaine || [];
+  return (
+    <Modal open={open} onClose={onClose} title="RDV pris — comparaison hebdomadaire">
+      <p className="text-xs text-slate2-500 mb-4">8 dernières semaines (lundi → dimanche, semaine en cours incluse)</p>
+      <WeeklyRdvChart data={parSemaine} />
+      <h3 className="text-sm font-semibold text-slate2-700 mt-6 mb-2">RDV pris ce mois-ci ({details.length})</h3>
+      {details.length === 0 && <p className="text-sm text-slate2-400">Aucun RDV pris ce mois-ci.</p>}
+      {details.length > 0 && (
+        <ul className="divide-y divide-slate2-100 max-h-[40vh] overflow-y-auto -mx-1">
+          {details.map((item) => (
+            <li key={item.id} className="py-1">
+              <DrillDownRow
+                to={`/clients/contact/${item.contact_id}`}
+                primary={`${item.contact_prenom} ${item.contact_nom}`}
+                secondary={`${item.entreprise_nom} — ${formatDate(item.date_echange, true)}`}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
+  );
+}
+
 function ShortcutButton({ icon: Icon, label, onClick }) {
   return (
     <button onClick={onClick} className="card p-4 flex flex-col items-start gap-2 hover:shadow-card-hover hover:-translate-y-0.5 transition-all text-left">
@@ -111,6 +197,7 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [drillDown, setDrillDown] = useState(null); // { key, label } | null
+  const [rdvModalOpen, setRdvModalOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -121,7 +208,7 @@ export default function Dashboard() {
   if (!data) return <Loading />;
   const {
     totaux, besoins_en_cours, derniers_echanges, dernieres_fiches, besoins_par_statut,
-    besoins_prioritaires, candidats_positionnes_recemment, activite_mois, activite_mois_details,
+    besoins_prioritaires, candidats_positionnes_recemment, activite_mois, activite_mois_details, rdv_pris,
   } = data;
   const maxStatut = Math.max(1, ...besoins_par_statut.map((b) => b.n));
   const activiteMoisData = [
@@ -212,7 +299,12 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <ActivityBarChart data={activiteMoisData} onBarClick={(d) => setDrillDown({ key: d.key, label: d.label })} />
+      <div className="grid lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2">
+          <ActivityBarChart data={activiteMoisData} onBarClick={(d) => setDrillDown({ key: d.key, label: d.label })} />
+        </div>
+        <RdvPrisCard rdvPris={rdv_pris} onOpen={() => setRdvModalOpen(true)} />
+      </div>
 
       <div className="grid lg:grid-cols-3 gap-5">
         <div className="card p-5 lg:col-span-2">
@@ -313,6 +405,8 @@ export default function Dashboard() {
         items={drillDownItems}
         renderItem={renderDrillDownItem}
       />
+
+      <RdvSemaineModal open={rdvModalOpen} onClose={() => setRdvModalOpen(false)} rdvPris={rdv_pris} />
     </div>
   );
 }
