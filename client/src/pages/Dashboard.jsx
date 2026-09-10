@@ -127,6 +127,7 @@ export default function Dashboard() {
   const activiteMoisData = [
     { key: 'besoins_detectes', label: 'Besoins détectés', value: activite_mois.besoins_detectes, color: '#B45309' },
     { key: 'candidats_positionnes', label: 'Candidats positionnés', value: activite_mois.candidats_positionnes, color: '#047857' },
+    { key: 'entretiens_planifies', label: 'Entretiens planifiés', value: activite_mois.entretiens_planifies, color: '#0369A1' },
     { key: 'entretiens_realises', label: 'Entretiens réalisés', value: activite_mois.entretiens_realises, color: '#4527EA' },
   ];
 
