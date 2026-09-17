@@ -50,8 +50,8 @@ export default function BesoinFormModal({ open, onClose, onSaved, besoin, defaul
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={besoin ? 'Modifier le besoin' : 'Nouveau besoin'} wide>
-      <div className="grid md:grid-cols-2 gap-x-4">
+    <Modal open={open} onClose={onClose} title={besoin ? 'Modifier le besoin' : 'Nouveau besoin'} size="xl">
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-x-4">
         <Field label="Titre du besoin" required><input className="input" value={form.titre} onChange={set('titre')} /></Field>
         <Field label="Priorité">
           <Select value={form.priorite} onChange={set('priorite')}>
@@ -69,10 +69,12 @@ export default function BesoinFormModal({ open, onClose, onSaved, besoin, defaul
         </Field>
       </div>
 
-      <Field label="Description du contexte"><textarea className="input" rows={3} value={form.description_contexte} onChange={set('description_contexte')} /></Field>
-      <Field label="Missions attendues"><textarea className="input" rows={2} value={form.missions} onChange={set('missions')} /></Field>
-
       <div className="grid md:grid-cols-2 gap-x-4">
+        <Field label="Description du contexte"><textarea className="input" rows={3} value={form.description_contexte} onChange={set('description_contexte')} /></Field>
+        <Field label="Missions attendues"><textarea className="input" rows={3} value={form.missions} onChange={set('missions')} /></Field>
+      </div>
+
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-x-4">
         <Field label="Compétences / technologies obligatoires">
           <TagsInput value={form.technologies_obligatoires} onChange={(v) => setForm((f) => ({ ...f, technologies_obligatoires: v }))} />
         </Field>
