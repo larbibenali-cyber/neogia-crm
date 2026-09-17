@@ -1,18 +1,22 @@
 import React from 'react';
 import { X, Loader2, Inbox } from 'lucide-react';
 
-export function Modal({ open, onClose, title, children, wide }) {
+// `size` accepte 'lg' (défaut) | 'wide' | 'xl' — `wide` (booléen) reste
+// supporté pour compatibilité et équivaut à size="wide".
+export function Modal({ open, onClose, title, children, wide, size }) {
   if (!open) return null;
+  const effectiveSize = size || (wide ? 'wide' : 'lg');
+  const maxWidthClass = effectiveSize === 'xl' ? 'max-w-4xl' : effectiveSize === 'wide' ? 'max-w-2xl' : 'max-w-lg';
   return (
     <div className="fixed inset-0 z-[150] flex items-start md:items-center justify-center bg-slate2-900/40 p-4 overflow-y-auto">
-      <div className={`card w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} my-8`}>
+      <div className={`card w-full ${maxWidthClass} my-8`}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate2-100">
           <h3 className="font-heading font-semibold text-slate2-900">{title}</h3>
           <button onClick={onClose} className="text-slate2-400 hover:text-slate2-700 p-1 rounded-lg hover:bg-slate2-50">
             <X size={18} />
           </button>
         </div>
-        <div className="px-6 py-5 max-h-[75vh] overflow-y-auto">{children}</div>
+        <div className="px-6 py-5 max-h-[80vh] overflow-y-auto">{children}</div>
       </div>
     </div>
   );
