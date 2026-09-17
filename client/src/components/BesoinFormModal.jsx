@@ -69,10 +69,24 @@ export default function BesoinFormModal({ open, onClose, onSaved, besoin, defaul
         </Field>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-x-4">
-        <Field label="Description du contexte"><textarea className="input" rows={3} value={form.description_contexte} onChange={set('description_contexte')} /></Field>
-        <Field label="Missions attendues"><textarea className="input" rows={3} value={form.missions} onChange={set('missions')} /></Field>
-      </div>
+      <Field label="Description du contexte">
+        <textarea
+          className="input"
+          rows={8}
+          style={{ resize: 'vertical', minHeight: '12rem' }}
+          value={form.description_contexte}
+          onChange={set('description_contexte')}
+        />
+      </Field>
+      <Field label="Missions attendues">
+        <textarea
+          className="input"
+          rows={6}
+          style={{ resize: 'vertical', minHeight: '9rem' }}
+          value={form.missions}
+          onChange={set('missions')}
+        />
+      </Field>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-x-4">
         <Field label="Compétences / technologies obligatoires">
