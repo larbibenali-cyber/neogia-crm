@@ -204,6 +204,15 @@ router.get('/', async (req, res, next) => {
       ORDER BY ech.date_rdv ASC, ech.heure_rdv ASC NULLS LAST
     `, { monthStart, monthEnd });
 
+    // Total « RDV pris » depuis le tout début (tous statuts confondus, y
+    // compris les annulés — un RDV annulé a bien été pris à un moment donné).
+    // C'est ce chiffre-là qui est affiché sur la carte du tableau de bord ;
+    // le détail par semaine (rdvParSemaine, plus bas) reste lui limité aux 8
+    // dernières semaines pour la comparaison hebdomadaire.
+    const rdvPrisTotalRow = await dbGet(`
+      SELECT COUNT(*) c FROM echanges WHERE type = 'rendez_vous' AND date_rdv IS NOT NULL
+    `);
+
     // RDV « réalisés » — sous-ensemble des RDV pris du mois dont le statut a été
     // positionné sur 'realise' depuis la liste "RDV pris" du tableau de bord, une
     // fois le rendez-vous passé. Volontairement distinct du total "RDV pris" : un
@@ -287,6 +296,7 @@ router.get('/', async (req, res, next) => {
         entretiens_planifies: entretiensPlanifiesMoisRows,
       },
       rdv_pris: {
+        total: rdvPrisTotalRow.c,
         mois: rdvPrisMoisRows.length,
         mois_details: rdvPrisMoisRows,
         par_semaine: rdvParSemaine,
