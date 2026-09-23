@@ -183,11 +183,13 @@ function RdvListRow({ item, onStatutChange }) {
 }
 
 // Widget dédié « RDV pris » — distinct du diagramme « Activité du mois » : le
-// total du mois est affiché directement sur la carte, et un clic ouvre une
-// modale avec le détail semaine après semaine (WeeklyRdvChart) ainsi que la
-// liste des RDV du mois, chacun cliquable vers la fiche contact correspondante.
+// chiffre affiché sur la carte est le total depuis le tout début (tous les
+// RDV jamais pris, quel que soit leur statut ensuite), et un clic ouvre une
+// modale avec le détail semaine après semaine (WeeklyRdvChart, 8 dernières
+// semaines) ainsi que la liste des RDV du mois en cours, chacun cliquable
+// vers la fiche contact correspondante.
 function RdvPrisCard({ rdvPris, onOpen }) {
-  const mois = rdvPris?.mois || 0;
+  const total = rdvPris?.total ?? rdvPris?.mois ?? 0;
   return (
     <button
       onClick={onOpen}
@@ -199,8 +201,8 @@ function RdvPrisCard({ rdvPris, onOpen }) {
         </h2>
         <ArrowRight size={14} className="text-slate2-300" />
       </div>
-      <p className="text-xs text-slate2-500 mb-3">Ce mois-ci — cliquez pour voir la comparaison semaine après semaine</p>
-      <div className="text-3xl font-heading font-semibold" style={{ color: '#7C3AED' }}>{mois}</div>
+      <p className="text-xs text-slate2-500 mb-3">Depuis le début — cliquez pour voir la comparaison semaine après semaine</p>
+      <div className="text-3xl font-heading font-semibold" style={{ color: '#7C3AED' }}>{total}</div>
     </button>
   );
 }
