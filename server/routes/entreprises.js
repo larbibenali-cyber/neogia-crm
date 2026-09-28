@@ -58,40 +58,50 @@ router.get('/', async (req, res, next) => {
       }
     }
     const whereSql = where.join(' AND ');
-    const total = (await dbGet(`SELECT COUNT(*)::int c FROM entreprises e WHERE ${whereSql}`, params)).c;
-    const rows = await dbAll(`
-      SELECT e.* FROM entreprises e WHERE ${whereSql} ORDER BY e.nom LIMIT @limit OFFSET @offset
-    `, { ...params, limit: pageSize, offset });
+    // Le total et la page de résultats ne dépendent pas l'un de l'autre : on les
+    // lance en parallèle plutôt que d'attendre le premier avant de lancer le
+    // second. Ça évite de payer deux allers-retours réseau vers la base l'un
+    // après l'autre (c'est ce qui rendait le chargement de la liste plus lent
+    // que nécessaire, surtout maintenant qu'elle affiche plus d'entreprises
+    // par page).
+    const [totalRow, rows] = await Promise.all([
+      dbGet(`SELECT COUNT(*)::int c FROM entreprises e WHERE ${whereSql}`, params),
+      dbAll(`
+        SELECT e.* FROM entreprises e WHERE ${whereSql} ORDER BY e.nom LIMIT @limit OFFSET @offset
+      `, { ...params, limit: pageSize, offset }),
+    ]);
+    const total = totalRow.c;
 
     const ids = rows.map((r) => r.id);
     let contactsById = {}, besoinsById = {}, besoinsOuvertsById = {}, techById = {}, lastExchangeById = {};
     if (ids.length) {
-      const contactsCounts = await dbAll(`SELECT entreprise_id, COUNT(*)::int n FROM contacts WHERE entreprise_id = ANY(?::bigint[]) AND archived = false GROUP BY entreprise_id`, [ids]);
+      // Même logique ici : ces 5 requêtes ne portent chacune que sur `ids` et ne
+      // dépendent pas les unes des autres, donc elles partent toutes en même
+      // temps au lieu de s'enchaîner une par une.
+      const [contactsCounts, besoinsCounts, besoinsOuverts, techRows, lastEx] = await Promise.all([
+        dbAll(`SELECT entreprise_id, COUNT(*)::int n FROM contacts WHERE entreprise_id = ANY(?::bigint[]) AND archived = false GROUP BY entreprise_id`, [ids]),
+        dbAll(`SELECT entreprise_id, COUNT(*)::int n FROM besoins WHERE entreprise_id = ANY(?::bigint[]) GROUP BY entreprise_id`, [ids]),
+        dbAll(`
+          SELECT entreprise_id, COUNT(*)::int n FROM besoins
+          WHERE entreprise_id = ANY(?::bigint[]) AND archived = false AND statut_synthese IN ('À venir', 'En cours')
+          GROUP BY entreprise_id
+        `, [ids]),
+        dbAll(`
+          SELECT et.entreprise_id, t.id, t.nom, t.categorie, et.weight
+          FROM entreprise_technologies et JOIN technologies t ON t.id = et.technology_id
+          WHERE et.entreprise_id = ANY(?::bigint[]) ORDER BY et.weight DESC
+        `, [ids]),
+        dbAll(`
+          SELECT entreprise_id, MAX(COALESCE(date_echange, created_at::text)) AS last
+          FROM echanges WHERE entreprise_id = ANY(?::bigint[]) GROUP BY entreprise_id
+        `, [ids]),
+      ]);
       contactsById = Object.fromEntries(contactsCounts.map((r) => [r.entreprise_id, r.n]));
-
-      const besoinsCounts = await dbAll(`SELECT entreprise_id, COUNT(*)::int n FROM besoins WHERE entreprise_id = ANY(?::bigint[]) GROUP BY entreprise_id`, [ids]);
       besoinsById = Object.fromEntries(besoinsCounts.map((r) => [r.entreprise_id, r.n]));
-
-      const besoinsOuverts = await dbAll(`
-        SELECT entreprise_id, COUNT(*)::int n FROM besoins
-        WHERE entreprise_id = ANY(?::bigint[]) AND archived = false AND statut_synthese IN ('À venir', 'En cours')
-        GROUP BY entreprise_id
-      `, [ids]);
       besoinsOuvertsById = Object.fromEntries(besoinsOuverts.map((r) => [r.entreprise_id, r.n]));
-
-      const techRows = await dbAll(`
-        SELECT et.entreprise_id, t.id, t.nom, t.categorie, et.weight
-        FROM entreprise_technologies et JOIN technologies t ON t.id = et.technology_id
-        WHERE et.entreprise_id = ANY(?::bigint[]) ORDER BY et.weight DESC
-      `, [ids]);
       for (const r of techRows) {
         (techById[r.entreprise_id] = techById[r.entreprise_id] || []).push({ id: r.id, nom: r.nom, categorie: r.categorie, weight: r.weight });
       }
-
-      const lastEx = await dbAll(`
-        SELECT entreprise_id, MAX(COALESCE(date_echange, created_at::text)) AS last
-        FROM echanges WHERE entreprise_id = ANY(?::bigint[]) GROUP BY entreprise_id
-      `, [ids]);
       lastExchangeById = Object.fromEntries(lastEx.map((r) => [r.entreprise_id, r.last]));
     }
 
