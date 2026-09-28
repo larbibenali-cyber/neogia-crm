@@ -70,10 +70,15 @@ function EntreprisesView() {
     page: parseInt(params.get('page') || '1', 10),
   };
 
+  // pageSize à 60 : avec ~195 entreprises aujourd'hui, ça tient sur 3-4
+  // pages (au lieu de 9 avec l'ancienne valeur de 24) tout en laissant de
+  // la marge pour la croissance du portefeuille. La recherche et le filtre
+  // technologie restent le moyen le plus rapide de retrouver une entreprise
+  // précise, la pagination Précédent/Suivant sert surtout à parcourir.
   const load = () => {
     setLoading(true);
     setError(null);
-    api.get(`/entreprises${qs({ ...filters, pageSize: 24 })}`)
+    api.get(`/entreprises${qs({ ...filters, pageSize: 60 })}`)
       .then((d) => { setData(d); setLoading(false); })
       .catch((e) => { setError(e.message || 'Le chargement des entreprises a échoué.'); setLoading(false); });
   };
