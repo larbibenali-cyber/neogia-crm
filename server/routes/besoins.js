@@ -80,7 +80,7 @@ router.get('/', async (req, res, next) => {
         where.push(`EXISTS (
           SELECT 1 FROM besoin_technologies bt JOIN technologies t ON t.id = bt.technology_id
           WHERE bt.besoin_id = b.id AND lower(t.nom) = ANY(@techNames::text[])
-        )]);
+        )`);
         params.techNames = techNames;
       }
     }
