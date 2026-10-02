@@ -80,15 +80,23 @@ router.get('/', async (req, res, next) => {
         where.push(`EXISTS (
           SELECT 1 FROM besoin_technologies bt JOIN technologies t ON t.id = bt.technology_id
           WHERE bt.besoin_id = b.id AND lower(t.nom) = ANY(@techNames::text[])
-        )`);
+        )]);
         params.techNames = techNames;
       }
     }
 
     const whereSql = where.join(' AND ');
+    // Tri par défaut : les plus récemment créés d'abord. Mais quand on regarde
+    // spécifiquement les besoins « À venir » (depuis le widget du tableau de bord ou
+    // le filtre Statut), ce qui compte c'est l'échéance, pas la date de création : on
+    // trie alors par date de démarrage la plus proche d'abord (les besoins sans date
+    // de démarrage renseignée restent en bas de liste plutôt que de fausser le tri).
+    const orderBySql = groupeFilter === 'À venir'
+      ? 'b.date_demarrage ASC NULLS LAST, b.created_at DESC'
+      : 'b.created_at DESC';
     const total = (await dbGet(`SELECT COUNT(*)::int AS total FROM besoins b WHERE ${whereSql}`, params)).total;
     const pageSlice = await dbAll(`
-      SELECT b.* FROM besoins b WHERE ${whereSql} ORDER BY b.created_at DESC LIMIT @limit OFFSET @offset
+      SELECT b.* FROM besoins b WHERE ${whereSql} ORDER BY ${orderBySql} LIMIT @limit OFFSET @offset
     `, { ...params, limit: pageSize, offset });
 
     const page_rows = [];
