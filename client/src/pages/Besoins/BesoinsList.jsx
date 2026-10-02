@@ -9,6 +9,17 @@ import { usePickLists } from '../../lib/PickListsContext';
 import { formatDate, formatMoney } from '../../lib/format';
 import { useToast } from '../../lib/ToastContext';
 
+// Onglets de statut affichés à côté de « Besoins clôturés ». Chaque besoin actif (non
+// archivé) a un statut_synthese parmi ces valeurs (calculé côté serveur par
+// computeSyntheseStatut) — on couvre ici « Gagné » en plus des 3 demandés pour que ces
+// besoins-là ne se retrouvent pas eux aussi sans onglet où apparaître.
+const STATUS_TABS = [
+  { key: 'À venir', label: 'À venir' },
+  { key: 'Besoin détecté', label: 'Besoin détecté' },
+  { key: 'Gagné', label: 'Gagné' },
+  { key: 'Perdu', label: 'Perdu' },
+];
+
 export default function BesoinsList() {
   const [params, setParams] = useSearchParams();
   const [data, setData] = useState(null);
@@ -33,12 +44,27 @@ export default function BesoinsList() {
     archived: params.get('archived') === 'true' ? 'true' : '',
     page: parseInt(params.get('page') || '1', 10),
   };
-  const isArchivedTab = filters.archived === 'true';
+  // Le widget « Besoins par statut » du tableau de bord peut renvoyer vers
+  // /besoins?groupe=Clôturé : on le traite comme l'onglet Clôturés (archived = true),
+  // cohérent avec la façon dont un besoin devient réellement « Clôturé » (l'action
+  // Clôturer archive le besoin, elle ne fait pas que changer son statut).
+  const isArchivedTab = filters.archived === 'true' || filters.groupe === 'Clôturé';
+  // Par défaut (ni onglet de statut ni onglet Clôturés précisé dans l'URL — par exemple
+  // en arrivant depuis le menu de navigation), on affiche l'onglet « À venir » plutôt
+  // qu'un mélange de tous les statuts : chaque besoin actif a maintenant un onglet dédié,
+  // il n'y a donc plus de vue « tout en vrac ».
+  const effectiveGroupe = isArchivedTab ? '' : (filters.groupe || 'À venir');
+  const effectiveArchived = isArchivedTab ? 'true' : '';
+  // Repli au cas où `groupe` arrive avec une valeur hors des onglets ci-dessus (ex. le
+  // lien « Besoins ouverts » du tableau de bord, qui regroupe À venir + Besoin détecté) :
+  // on affiche quand même un libellé plutôt que de laisser un texte vide ou « undefined ».
+  const activeTabLabel = isArchivedTab ? null : (STATUS_TABS.find((t) => t.key === effectiveGroupe)?.label
+    || (effectiveGroupe === 'ouverts' ? 'Ouverts (À venir + Besoin détecté)' : effectiveGroupe));
 
   const load = () => {
     setLoading(true);
     setError(null);
-    api.get(`/besoins${qs({ ...filters, pageSize: 20 })}`)
+    api.get(`/besoins${qs({ ...filters, groupe: effectiveGroupe, archived: effectiveArchived, pageSize: 20 })}`)
       .then((d) => { setData(d); setLoading(false); })
       .catch((e) => { setError(e.message || 'Le chargement des besoins a échoué.'); setLoading(false); });
   };
@@ -51,12 +77,15 @@ export default function BesoinsList() {
     setParams(next);
   };
 
+  const selectTab = (groupeKey) => updateParam({ groupe: groupeKey, archived: '' });
+  const selectArchivedTab = () => updateParam({ groupe: '', archived: 'true' });
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-heading font-semibold text-slate2-900">Besoins</h1>
-          <p className="text-slate2-500 text-sm mt-1">{data ? `${data.total} besoin(s)${isArchivedTab ? ' clôturé(s)' : ''}` : '...'}</p>
+          <p className="text-slate2-500 text-sm mt-1">{data ? `${data.total} besoin(s)${isArchivedTab ? ' clôturé(s)' : activeTabLabel ? ` · ${activeTabLabel}` : ''}` : '...'}</p>
         </div>
         <div className="flex gap-2">
           <button className="btn btn-secondary" onClick={() => downloadFile('/export/besoins.xlsx', 'besoins.xlsx').catch((e) => toast(e.message, 'error'))}><Download size={16} /> Exporter</button>
@@ -64,22 +93,25 @@ export default function BesoinsList() {
         </div>
       </div>
 
-      <div className="flex border-b border-slate2-100">
+      <div className="flex flex-wrap border-b border-slate2-100">
+        {STATUS_TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => selectTab(t.key)}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${!isArchivedTab && effectiveGroupe === t.key ? 'border-brand text-brand' : 'border-transparent text-slate2-500 hover:text-slate2-800'}`}
+          >
+            {t.label}
+          </button>
+        ))}
         <button
-          onClick={() => updateParam({ archived: '' })}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${!isArchivedTab ? 'border-brand text-brand' : 'border-transparent text-slate2-500 hover:text-slate2-800'}`}
-        >
-          Besoins actifs
-        </button>
-        <button
-          onClick={() => updateParam({ archived: 'true' })}
+          onClick={selectArchivedTab}
           className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${isArchivedTab ? 'border-brand text-brand' : 'border-transparent text-slate2-500 hover:text-slate2-800'}`}
         >
-          <Archive size={14} /> Besoins clôturés
+          <Archive size={14} /> Clôturés
         </button>
       </div>
 
-      {filters.groupe && (
+      {filters.groupe && !STATUS_TABS.some((t) => t.key === filters.groupe) && (
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 text-sm bg-brand-50 text-brand font-medium px-3 py-1.5 rounded-full">
             Statut : {filters.groupe === 'ouverts' ? 'Ouverts (À venir + Besoin détecté)' : filters.groupe}
@@ -98,7 +130,7 @@ export default function BesoinsList() {
         <div className="flex gap-3 items-center flex-wrap">
           <input className="input flex-1 min-w-[240px]" placeholder="Rechercher (titre, référence...)" defaultValue={filters.search} onChange={(e) => updateParam({ search: e.target.value })} />
           <button className={`btn ${showFilters ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setShowFilters((s) => !s)}><Filter size={16} /> Filtres</button>
-          {(filters.statut || filters.priorite || filters.tech || filters.groupe) && <button className="btn btn-ghost text-red-500" onClick={() => setParams({})}><X size={14} /> Réinitialiser</button>}
+          {(filters.statut || filters.priorite || filters.tech) && <button className="btn btn-ghost text-red-500" onClick={() => updateParam({ statut: '', priorite: '', tech: '', search: '' })}><X size={14} /> Réinitialiser</button>}
         </div>
         {showFilters && (
           <div className="grid md:grid-cols-3 gap-3 mt-4 pt-4 border-t border-slate2-100">
@@ -126,8 +158,8 @@ export default function BesoinsList() {
       )}
       {!loading && !error && data && data.results.length === 0 && (
         <EmptyState
-          title={isArchivedTab ? 'Aucun besoin clôturé' : 'Aucun besoin trouvé'}
-          description={isArchivedTab ? 'Les besoins que vous clôturez depuis leur fiche apparaîtront ici.' : "Essayez d'ajuster votre recherche ou vos filtres."}
+          title={isArchivedTab ? 'Aucun besoin clôturé' : `Aucun besoin « ${activeTabLabel} »`}
+          description={isArchivedTab ? 'Les besoins que vous clôturez depuis leur fiche apparaîtront ici.' : "Essayez un autre onglet, ou ajustez votre recherche et vos filtres."}
         />
       )}
 
