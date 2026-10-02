@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Filter, Download, X, Calendar, Building2 } from 'lucide-react';
+import { Plus, Filter, Download, X, Calendar, Building2, Archive } from 'lucide-react';
 import { api, qs, downloadFile } from '../../lib/api';
 import { Loading, Pagination, EmptyState } from '../../components/ui';
 import StatusBadge from '../../components/StatusBadge';
@@ -26,8 +26,14 @@ export default function BesoinsList() {
     priorite: params.get('priorite') || '',
     tech: params.get('tech') || '',
     groupe: params.get('groupe') || '',
+    // Onglet « Besoins clôturés » : ces besoins sont archivés (archived = true) au moment
+    // où on clique sur « Clôturer » dans la fiche détail. Sans ce filtre explicite, la
+    // liste principale (qui exclut toujours les besoins archivés) les fait simplement
+    // disparaître sans endroit où les retrouver.
+    archived: params.get('archived') === 'true' ? 'true' : '',
     page: parseInt(params.get('page') || '1', 10),
   };
+  const isArchivedTab = filters.archived === 'true';
 
   const load = () => {
     setLoading(true);
@@ -50,12 +56,27 @@ export default function BesoinsList() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-heading font-semibold text-slate2-900">Besoins</h1>
-          <p className="text-slate2-500 text-sm mt-1">{data ? `${data.total} besoin(s)` : '...'}</p>
+          <p className="text-slate2-500 text-sm mt-1">{data ? `${data.total} besoin(s)${isArchivedTab ? ' clôturé(s)' : ''}` : '...'}</p>
         </div>
         <div className="flex gap-2">
           <button className="btn btn-secondary" onClick={() => downloadFile('/export/besoins.xlsx', 'besoins.xlsx').catch((e) => toast(e.message, 'error'))}><Download size={16} /> Exporter</button>
           <button className="btn btn-primary" onClick={() => setModalOpen(true)}><Plus size={16} /> Nouveau besoin</button>
         </div>
+      </div>
+
+      <div className="flex border-b border-slate2-100">
+        <button
+          onClick={() => updateParam({ archived: '' })}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${!isArchivedTab ? 'border-brand text-brand' : 'border-transparent text-slate2-500 hover:text-slate2-800'}`}
+        >
+          Besoins actifs
+        </button>
+        <button
+          onClick={() => updateParam({ archived: 'true' })}
+          className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${isArchivedTab ? 'border-brand text-brand' : 'border-transparent text-slate2-500 hover:text-slate2-800'}`}
+        >
+          <Archive size={14} /> Besoins clôturés
+        </button>
       </div>
 
       {filters.groupe && (
@@ -103,7 +124,12 @@ export default function BesoinsList() {
       {!loading && error && (
         <EmptyState title="Impossible de charger les besoins" description={error} />
       )}
-      {!loading && !error && data && data.results.length === 0 && <EmptyState title="Aucun besoin trouvé" description="Essayez d'ajuster votre recherche ou vos filtres." />}
+      {!loading && !error && data && data.results.length === 0 && (
+        <EmptyState
+          title={isArchivedTab ? 'Aucun besoin clôturé' : 'Aucun besoin trouvé'}
+          description={isArchivedTab ? 'Les besoins que vous clôturez depuis leur fiche apparaîtront ici.' : "Essayez d'ajuster votre recherche ou vos filtres."}
+        />
+      )}
 
       {!loading && !error && data && data.results.length > 0 && (
         <div className="space-y-2">
