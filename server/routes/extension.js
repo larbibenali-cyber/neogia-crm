@@ -10,6 +10,7 @@
 const express = require('express');
 const { dbGet, dbAll, dbRun } = require('../../db/pg');
 const { requireApiToken } = require('../middleware/apiToken');
+const { toStringArray } = require('../utils');
 
 const router = express.Router();
 router.use(requireApiToken);
@@ -85,7 +86,11 @@ router.post('/import', async (req, res, next) => {
     // l'utilisateur dans le panneau de l'extension, restent facultatifs, et
     // ne remplacent une valeur déjà enregistrée que si l'utilisateur en a
     // tapé une nouvelle.
+    // Comme dans le CRM (fiche contact), on accepte un mobile principal
+    // (telephone_mobile) + des mobiles supplémentaires (mobiles_supplementaires,
+    // tableau) — un prospect en a parfois plusieurs.
     const email = b.email !== undefined ? String(b.email).trim().toLowerCase() : undefined;
+    const mobilesSupp = b.mobiles_supplementaires !== undefined ? toStringArray(b.mobiles_supplementaires) : undefined;
 
     let contact;
     if (b.contactId && b.updateExisting) {
@@ -95,6 +100,7 @@ router.post('/import', async (req, res, next) => {
         UPDATE contacts SET
           fonction = @fonction, localisation = @localisation, linkedin_url = @linkedin_url,
           email = @email, email_normalise = @email_normalise, telephone_mobile = @telephone_mobile,
+          mobiles_supplementaires = @mobiles_supplementaires,
           entreprise_id = @entreprise_id, updated_at = now()
         WHERE id = @id
       `, {
@@ -105,6 +111,7 @@ router.post('/import', async (req, res, next) => {
         email: email !== undefined ? (b.email || '') : (existing.email || ''),
         email_normalise: email !== undefined ? email : existing.email_normalise,
         telephone_mobile: b.telephone_mobile || existing.telephone_mobile || '',
+        mobiles_supplementaires: mobilesSupp !== undefined ? mobilesSupp : (existing.mobiles_supplementaires || []),
         entreprise_id: entrepriseId,
       });
       contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [b.contactId]);
@@ -113,11 +120,11 @@ router.post('/import', async (req, res, next) => {
       const row = await dbGet(`
         INSERT INTO contacts (
           entreprise_id, nom, prenom, fonction, localisation, linkedin_url,
-          email, email_normalise, telephone_mobile,
+          email, email_normalise, telephone_mobile, mobiles_supplementaires,
           source, statut, incomplete, created_at, updated_at
         ) VALUES (
           @entreprise_id, @nom, @prenom, @fonction, @localisation, @linkedin_url,
-          @email, @email_normalise, @telephone_mobile,
+          @email, @email_normalise, @telephone_mobile, @mobiles_supplementaires,
           'Extension LinkedIn', 'prospect_a_contacter', @incomplete, now(), now()
         ) RETURNING id
       `, {
@@ -126,7 +133,8 @@ router.post('/import', async (req, res, next) => {
         localisation: b.ville || '', linkedin_url: b.linkedin_url || '',
         email: b.email || '', email_normalise: email || '',
         telephone_mobile: b.telephone_mobile || '',
-        incomplete: !(email || b.telephone_mobile),
+        mobiles_supplementaires: mobilesSupp || [],
+        incomplete: !(email || b.telephone_mobile || (mobilesSupp && mobilesSupp.length)),
       });
       contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [row.id]);
     }
