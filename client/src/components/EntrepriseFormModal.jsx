@@ -3,6 +3,7 @@ import { Modal, Field, Select } from './ui';
 import { ENTREPRISE_STATUTS } from './EntrepriseBadges';
 import { useToast } from '../lib/ToastContext';
 import { api } from '../lib/api';
+import VoiceDictationButton from './VoiceDictationButton';
 
 const EMPTY = { nom: '', statut: 'prospect', secteur: '', adresse: '', site_web: '', notes: '' };
 
@@ -45,7 +46,12 @@ export default function EntrepriseFormModal({ open, onClose, onSaved }) {
       <Field label="Secteur"><input className="input" value={form.secteur} onChange={set('secteur')} /></Field>
       <Field label="Adresse"><input className="input" value={form.adresse} onChange={set('adresse')} /></Field>
       <Field label="Site web"><input className="input" value={form.site_web} onChange={set('site_web')} placeholder="https://..." /></Field>
-      <Field label="Notes"><textarea className="input" rows={3} value={form.notes} onChange={set('notes')} /></Field>
+      <Field label="Notes">
+        <div className="flex items-start gap-2">
+          <textarea className="input flex-1" rows={3} value={form.notes} onChange={set('notes')} />
+          <VoiceDictationButton value={form.notes} onChange={set('notes')} />
+        </div>
+      </Field>
 
       <div className="flex justify-end gap-2 mt-4">
         <button className="btn btn-ghost" onClick={onClose}>Annuler</button>
