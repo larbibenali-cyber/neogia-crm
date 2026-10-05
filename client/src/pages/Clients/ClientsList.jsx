@@ -330,12 +330,16 @@ function ContactsView() {
                         <Link to={`/clients/entreprise/${c.entreprise_id}`} className="text-slate2-700 hover:text-brand">{c.entreprise_nom}</Link>
                       </td>
                       <td className="px-4 py-3 text-slate2-600">{c.fonction || '—'}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-0.5">
-                          {c.email && <a href={`mailto:${c.email}`} className="flex items-center gap-1 text-brand hover:underline text-xs"><Mail size={12} />{c.email}</a>}
+                      <td className="px-4 py-3 max-w-[200px]">
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          {c.email && (
+                            <a href={`mailto:${c.email}`} title={c.email} className="flex items-center gap-1 min-w-0 text-brand hover:underline text-xs">
+                              <Mail size={12} className="shrink-0" /><span className="truncate">{c.email}</span>
+                            </a>
+                          )}
                           {(c.telephone_mobile || c.telephone_fixe) && (
-                            <a href={`tel:${(c.telephone_mobile || c.telephone_fixe).split('/')[0].trim()}`} className="flex items-center gap-1 text-slate2-600 hover:text-brand text-xs">
-                              <Phone size={12} />{c.telephone_mobile || c.telephone_fixe}
+                            <a href={`tel:${(c.telephone_mobile || c.telephone_fixe).split('/')[0].trim()}`} title={c.telephone_mobile || c.telephone_fixe} className="flex items-center gap-1 min-w-0 text-slate2-600 hover:text-brand text-xs">
+                              <Phone size={12} className="shrink-0" /><span className="truncate">{c.telephone_mobile || c.telephone_fixe}</span>
                             </a>
                           )}
                         </div>
@@ -381,18 +385,20 @@ function ContactsView() {
                       <a
                         href={`mailto:${c.email}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1.5 text-brand text-sm py-1"
+                        title={c.email}
+                        className="flex items-center gap-1.5 min-w-0 max-w-full text-brand text-sm py-1"
                       >
-                        <Mail size={14} />{c.email}
+                        <Mail size={14} className="shrink-0" /><span className="truncate">{c.email}</span>
                       </a>
                     )}
                     {(c.telephone_mobile || c.telephone_fixe) && (
                       <a
                         href={`tel:${(c.telephone_mobile || c.telephone_fixe).split('/')[0].trim()}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1.5 text-slate2-700 text-sm py-1"
+                        title={c.telephone_mobile || c.telephone_fixe}
+                        className="flex items-center gap-1.5 min-w-0 max-w-full text-slate2-700 text-sm py-1"
                       >
-                        <Phone size={14} />{c.telephone_mobile || c.telephone_fixe}
+                        <Phone size={14} className="shrink-0" /><span className="truncate">{c.telephone_mobile || c.telephone_fixe}</span>
                       </a>
                     )}
                   </div>
