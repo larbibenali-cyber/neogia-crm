@@ -62,11 +62,28 @@ export function EmptyState({ icon: Icon = Inbox, title, description, action }) {
 export function Pagination({ page, pageSize, total, onChange }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   if (totalPages <= 1) return null;
+  // Menu déroulant « page X / N » : au-delà de 3-4 pages, cliquer Suivant en boucle pour
+  // atteindre une page précise devient vite pénible — ce sélecteur permet d'y aller
+  // directement, en plus des boutons Précédent/Suivant conservés pour le parcours pas à pas.
   return (
     <div className="flex items-center justify-between px-1 py-3 text-sm text-slate2-500">
-      <span>{total} résultat{total > 1 ? 's' : ''} — page {page}/{totalPages}</span>
-      <div className="flex gap-1">
+      <span>{total} résultat{total > 1 ? 's' : ''}</span>
+      <div className="flex items-center gap-2">
         <button className="btn btn-ghost" disabled={page <= 1} onClick={() => onChange(page - 1)}>Précédent</button>
+        <span className="flex items-center gap-1.5">
+          Page
+          <select
+            className="input !py-1 !px-2 !w-auto text-sm"
+            value={page}
+            onChange={(e) => onChange(Number(e.target.value))}
+            aria-label="Aller à la page"
+          >
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          / {totalPages}
+        </span>
         <button className="btn btn-ghost" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>Suivant</button>
       </div>
     </div>
