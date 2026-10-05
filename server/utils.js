@@ -15,6 +15,24 @@ function toTagsArray(v) {
   return [];
 }
 
+// Un prospect a parfois plusieurs emails ou plusieurs mobiles : ces champs
+// arrivent du formulaire (ou de l'extension LinkedIn) sous forme de tableau
+// (potentiellement avec des entrées vides ou dupliquées côté client) — on
+// nettoie avant stockage. Partagé par server/routes/contacts.js et
+// server/routes/extension.js pour garder le même comportement partout.
+function toStringArray(value) {
+  const arr = Array.isArray(value) ? value : [];
+  const seen = new Set();
+  const out = [];
+  for (const v of arr) {
+    const s = String(v ?? '').trim();
+    if (!s || seen.has(s.toLowerCase())) continue;
+    seen.add(s.toLowerCase());
+    out.push(s);
+  }
+  return out;
+}
+
 async function generateReference(dbAll) {
   const year = new Date().getFullYear();
   const rows = await dbAll(`SELECT COUNT(*)::int c FROM besoins WHERE reference LIKE ?`, [`BES-${year}-%`]);
@@ -60,4 +78,4 @@ function computeSyntheseStatut(statut, statutSource) {
   return 'À venir';
 }
 
-module.exports = { paginate, parseJsonSafe, toTagsArray, generateReference, nowIso, computeSyntheseStatut };
+module.exports = { paginate, parseJsonSafe, toTagsArray, toStringArray, generateReference, nowIso, computeSyntheseStatut };
