@@ -3,6 +3,7 @@ import { AlertTriangle, Plus, X } from 'lucide-react';
 import { Modal, Field, Select } from './ui';
 import EntrepriseCombo from './EntrepriseCombo';
 import TagsInput from './TagsInput';
+import VoiceDictationButton from './VoiceDictationButton';
 import { usePickLists } from '../lib/PickListsContext';
 import { useToast } from '../lib/ToastContext';
 import { api } from '../lib/api';
@@ -148,7 +149,10 @@ export default function ContactFormModal({ open, onClose, onSaved, contact, defa
         <TagsInput value={form.tags} onChange={(tags) => setForm((f) => ({ ...f, tags }))} />
       </Field>
       <Field label="Notes générales">
-        <textarea className="input" rows={3} value={form.notes} onChange={set('notes')} />
+        <div className="flex items-start gap-2">
+          <textarea className="input flex-1" rows={3} value={form.notes} onChange={set('notes')} />
+          <VoiceDictationButton value={form.notes} onChange={set('notes')} />
+        </div>
       </Field>
 
       <div className="flex justify-end gap-2 mt-4">
