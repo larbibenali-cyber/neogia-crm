@@ -12,6 +12,7 @@ import TechCloud from '../../components/TechCloud';
 import CandidatFormModal from '../../components/CandidatFormModal';
 import BesoinCombo from '../../components/BesoinCombo';
 import EntretienDateModal from '../../components/EntretienDateModal';
+import VoiceDictationButton from '../../components/VoiceDictationButton';
 import { usePickLists } from '../../lib/PickListsContext';
 import { useToast } from '../../lib/ToastContext';
 import { useConfirm } from '../../lib/ConfirmContext';
@@ -434,7 +435,12 @@ function PositionnerModal({ open, candidatId, candidatLabel, onClose, onSaved })
         <Field label="Date"><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
         <Field label="TJM proposé (€)"><input type="number" className="input" value={tjm} onChange={(e) => setTjm(e.target.value)} /></Field>
       </div>
-      <Field label="Commentaire"><textarea className="input" rows={3} value={commentaires} onChange={(e) => setCommentaires(e.target.value)} /></Field>
+      <Field label="Commentaire">
+        <div className="flex items-start gap-2">
+          <textarea className="input flex-1" rows={3} value={commentaires} onChange={(e) => setCommentaires(e.target.value)} />
+          <VoiceDictationButton value={commentaires} onChange={(e) => setCommentaires(e.target.value)} />
+        </div>
+      </Field>
       <div className="flex justify-end gap-2 mt-4">
         <button className="btn btn-ghost" onClick={onClose}>Annuler</button>
         <button className="btn btn-primary" disabled={saving} onClick={submit}>{saving ? 'Enregistrement...' : 'Confirmer le positionnement'}</button>
