@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal, Field, Select } from './ui';
 import EntrepriseCombo from './EntrepriseCombo';
 import TagsInput from './TagsInput';
+import VoiceDictationButton from './VoiceDictationButton';
 import { usePickLists } from '../lib/PickListsContext';
 import { useToast } from '../lib/ToastContext';
 import { api } from '../lib/api';
@@ -70,22 +71,28 @@ export default function BesoinFormModal({ open, onClose, onSaved, besoin, defaul
       </div>
 
       <Field label="Description du contexte">
-        <textarea
-          className="input"
-          rows={8}
-          style={{ resize: 'vertical', minHeight: '12rem' }}
-          value={form.description_contexte}
-          onChange={set('description_contexte')}
-        />
+        <div className="flex items-start gap-2">
+          <textarea
+            className="input flex-1"
+            rows={8}
+            style={{ resize: 'vertical', minHeight: '12rem' }}
+            value={form.description_contexte}
+            onChange={set('description_contexte')}
+          />
+          <VoiceDictationButton value={form.description_contexte} onChange={set('description_contexte')} />
+        </div>
       </Field>
       <Field label="Missions attendues">
-        <textarea
-          className="input"
-          rows={6}
-          style={{ resize: 'vertical', minHeight: '9rem' }}
-          value={form.missions}
-          onChange={set('missions')}
-        />
+        <div className="flex items-start gap-2">
+          <textarea
+            className="input flex-1"
+            rows={6}
+            style={{ resize: 'vertical', minHeight: '9rem' }}
+            value={form.missions}
+            onChange={set('missions')}
+          />
+          <VoiceDictationButton value={form.missions} onChange={set('missions')} />
+        </div>
       </Field>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-x-4">
@@ -110,7 +117,12 @@ export default function BesoinFormModal({ open, onClose, onSaved, besoin, defaul
         </Field>
         <Field label="Source du besoin"><input className="input" value={form.source} onChange={set('source')} /></Field>
       </div>
-      <Field label="Notes internes"><textarea className="input" rows={2} value={form.notes_internes} onChange={set('notes_internes')} /></Field>
+      <Field label="Notes internes">
+        <div className="flex items-start gap-2">
+          <textarea className="input flex-1" rows={2} value={form.notes_internes} onChange={set('notes_internes')} />
+          <VoiceDictationButton value={form.notes_internes} onChange={set('notes_internes')} />
+        </div>
+      </Field>
 
       <div className="flex justify-end gap-2 mt-4">
         <button className="btn btn-ghost" onClick={onClose}>Annuler</button>
