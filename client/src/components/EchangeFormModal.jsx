@@ -4,6 +4,7 @@ import { usePickLists } from '../lib/PickListsContext';
 import { useToast } from '../lib/ToastContext';
 import { api } from '../lib/api';
 import RdvDateModal from './RdvDateModal';
+import VoiceDictationButton from './VoiceDictationButton';
 import { formatDate } from '../lib/format';
 
 // Format une Date en "YYYY-MM-DDTHH:MM" en heure LOCALE (contrairement à
@@ -110,13 +111,16 @@ export default function EchangeFormModal({ open, onClose, onSaved, contactId, ec
         </p>
       )}
       <Field label="Compte rendu" required>
-        <textarea
-          className="input"
-          rows={10}
-          style={{ resize: 'vertical', minHeight: '10rem' }}
-          value={form.compte_rendu || ''}
-          onChange={set('compte_rendu')}
-        />
+        <div className="flex items-start gap-2">
+          <textarea
+            className="input flex-1"
+            rows={10}
+            style={{ resize: 'vertical', minHeight: '10rem' }}
+            value={form.compte_rendu || ''}
+            onChange={set('compte_rendu')}
+          />
+          <VoiceDictationButton value={form.compte_rendu} onChange={set('compte_rendu')} />
+        </div>
       </Field>
       <Field label="Prochaine action"><input className="input" value={form.prochaine_action || ''} onChange={set('prochaine_action')} /></Field>
       <Field label="Date de relance (facultatif)"><input type="date" className="input" value={form.date_relance || ''} onChange={set('date_relance')} /></Field>
