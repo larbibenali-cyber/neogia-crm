@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { UploadCloud, FileText, Sparkles } from 'lucide-react';
 import { Modal, Field, Select } from './ui';
 import TagsInput from './TagsInput';
+import VoiceDictationButton from './VoiceDictationButton';
 import { usePickLists } from '../lib/PickListsContext';
 import { useToast } from '../lib/ToastContext';
 import { api } from '../lib/api';
@@ -135,9 +136,19 @@ export default function CandidatFormModal({ open, onClose, onSaved, candidat, pr
         <Field label="Source"><input className="input" value={form.source} onChange={set('source')} /></Field>
       </div>
       <Field label="Environnement technique / compétences"><TagsInput value={form.technologies} onChange={(v) => setForm((f) => ({ ...f, technologies: v }))} /></Field>
-      <Field label="Compétences principales (texte libre)"><textarea className="input" rows={2} value={form.competences_principales} onChange={set('competences_principales')} /></Field>
+      <Field label="Compétences principales (texte libre)">
+        <div className="flex items-start gap-2">
+          <textarea className="input flex-1" rows={2} value={form.competences_principales} onChange={set('competences_principales')} />
+          <VoiceDictationButton value={form.competences_principales} onChange={set('competences_principales')} />
+        </div>
+      </Field>
       <Field label="Secteurs d'intervention"><input className="input" value={form.secteurs} onChange={set('secteurs')} /></Field>
-      <Field label="Notes"><textarea className="input" rows={2} value={form.notes} onChange={set('notes')} /></Field>
+      <Field label="Notes">
+        <div className="flex items-start gap-2">
+          <textarea className="input flex-1" rows={2} value={form.notes} onChange={set('notes')} />
+          <VoiceDictationButton value={form.notes} onChange={set('notes')} />
+        </div>
+      </Field>
 
       <div className="flex justify-end gap-2 mt-4">
         <button className="btn btn-ghost" onClick={onClose}>Annuler</button>
