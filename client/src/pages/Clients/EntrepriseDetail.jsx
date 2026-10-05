@@ -11,6 +11,7 @@ import BesoinFormModal from '../../components/BesoinFormModal';
 import ContactPhones from '../../components/ContactPhones';
 import ContactEmail from '../../components/ContactEmail';
 import EchangeFormModal from '../../components/EchangeFormModal';
+import VoiceDictationButton from '../../components/VoiceDictationButton';
 import { timeAgo } from '../../lib/format';
 import { useToast } from '../../lib/ToastContext';
 
@@ -234,7 +235,12 @@ function EditEntrepriseModal({ open, onClose, entreprise, onSaved }) {
       <Field label="Secteur"><input className="input" value={form.secteur || ''} onChange={set('secteur')} /></Field>
       <Field label="Adresse"><input className="input" value={form.adresse || ''} onChange={set('adresse')} /></Field>
       <Field label="Site web"><input className="input" value={form.site_web || ''} onChange={set('site_web')} /></Field>
-      <Field label="Notes"><textarea className="input" rows={3} value={form.notes || ''} onChange={set('notes')} /></Field>
+      <Field label="Notes">
+        <div className="flex items-start gap-2">
+          <textarea className="input flex-1" rows={3} value={form.notes || ''} onChange={set('notes')} />
+          <VoiceDictationButton value={form.notes} onChange={set('notes')} />
+        </div>
+      </Field>
       <div className="flex justify-end gap-2 mt-4">
         <button className="btn btn-ghost" onClick={onClose}>Annuler</button>
         <button className="btn btn-primary" onClick={submit}>Enregistrer</button>
