@@ -34,8 +34,8 @@ router.get('/', async (req, res, next) => {
       JOIN entreprises e ON e.id = c.entreprise_id
       WHERE c.archived = false AND (
         c.nom ILIKE @l OR c.prenom ILIKE @l OR c.email ILIKE @l OR c.telephone_mobile ILIKE @l OR c.telephone_fixe ILIKE @l
-        OR (@qdigits != '' AND regexp_replace(coalesce(c.telephone_mobile, ''), '\D', '', 'g') LIKE '%' || @qdigits || '%')
-        OR (@qdigits != '' AND regexp_replace(coalesce(c.telephone_fixe, ''), '\D', '', 'g') LIKE '%' || @qdigits || '%')
+        OR (@qdigits != '' AND regexp_replace(coalesce(c.telephone_mobile, ''), '[^0-9]', '', 'g') LIKE '%' || @qdigits || '%')
+        OR (@qdigits != '' AND regexp_replace(coalesce(c.telephone_fixe, ''), '[^0-9]', '', 'g') LIKE '%' || @qdigits || '%')
         OR EXISTS (
           SELECT 1 FROM entreprise_technologies et JOIN technologies t ON t.id = et.technology_id
           WHERE et.entreprise_id = c.entreprise_id AND t.nom ILIKE @l
@@ -47,7 +47,7 @@ router.get('/', async (req, res, next) => {
       SELECT DISTINCT c.id, c.nom, c.prenom, c.email, c.metier FROM candidats c
       WHERE c.archived = false AND (
         c.nom ILIKE @l OR c.prenom ILIKE @l OR c.email ILIKE @l OR c.competences_principales ILIKE @l OR c.metier ILIKE @l
-        OR (@qdigits != '' AND regexp_replace(coalesce(c.telephone, ''), '\D', '', 'g') LIKE '%' || @qdigits || '%')
+        OR (@qdigits != '' AND regexp_replace(coalesce(c.telephone, ''), '[^0-9]', '', 'g') LIKE '%' || @qdigits || '%')
         OR EXISTS (
           SELECT 1 FROM candidat_technologies ct JOIN technologies t ON t.id = ct.technology_id
           WHERE ct.candidat_id = c.id AND t.nom ILIKE @l
