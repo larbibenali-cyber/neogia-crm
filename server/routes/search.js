@@ -8,6 +8,11 @@ router.get('/', async (req, res, next) => {
     const q = (req.query.q || '').trim();
     if (!q || q.length < 2) return res.json({ entreprises: [], contacts: [], candidats: [], besoins: [], technologies: [], echanges: [] });
     const like = `%${q}%`;
+    // Pour la recherche par numéro de téléphone : on compare les numéros en ne
+    // gardant que les chiffres (côté base ET côté saisie), afin qu'une recherche
+    // "0624479765" retrouve un numéro stocké "+33 6 24 47 97 65" ou "06 24 47 97 65"
+    // peu importe les espaces, tirets ou le préfixe international utilisés.
+    const qDigits = q.replace(/\D/g, '');
 
     // Une entreprise correspond soit par son nom, soit parce que son environnement
     // technique (entreprise_technologies) contient une techno dont le nom matche —
@@ -29,23 +34,26 @@ router.get('/', async (req, res, next) => {
       JOIN entreprises e ON e.id = c.entreprise_id
       WHERE c.archived = false AND (
         c.nom ILIKE @l OR c.prenom ILIKE @l OR c.email ILIKE @l OR c.telephone_mobile ILIKE @l OR c.telephone_fixe ILIKE @l
+        OR (@qdigits != '' AND regexp_replace(coalesce(c.telephone_mobile, ''), '\D', '', 'g') LIKE '%' || @qdigits || '%')
+        OR (@qdigits != '' AND regexp_replace(coalesce(c.telephone_fixe, ''), '\D', '', 'g') LIKE '%' || @qdigits || '%')
         OR EXISTS (
           SELECT 1 FROM entreprise_technologies et JOIN technologies t ON t.id = et.technology_id
           WHERE et.entreprise_id = c.entreprise_id AND t.nom ILIKE @l
         )
       ) LIMIT 8
-    `, { l: like });
+    `, { l: like, qdigits: qDigits });
 
     const candidats = await dbAll(`
       SELECT DISTINCT c.id, c.nom, c.prenom, c.email, c.metier FROM candidats c
       WHERE c.archived = false AND (
         c.nom ILIKE @l OR c.prenom ILIKE @l OR c.email ILIKE @l OR c.competences_principales ILIKE @l OR c.metier ILIKE @l
+        OR (@qdigits != '' AND regexp_replace(coalesce(c.telephone, ''), '\D', '', 'g') LIKE '%' || @qdigits || '%')
         OR EXISTS (
           SELECT 1 FROM candidat_technologies ct JOIN technologies t ON t.id = ct.technology_id
           WHERE ct.candidat_id = c.id AND t.nom ILIKE @l
         )
       ) LIMIT 8
-    `, { l: like });
+    `, { l: like, qdigits: qDigits });
 
     const besoins = await dbAll(`
       SELECT DISTINCT b.id, b.titre, b.reference, e.nom as entreprise_nom FROM besoins b JOIN entreprises e ON e.id = b.entreprise_id
