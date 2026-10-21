@@ -285,6 +285,29 @@ function ShortcutButton({ icon: Icon, label, onClick }) {
   );
 }
 
+// Encart « Nouveaux leads » : alimenté par les agents Claude (voir page Leads détectés).
+// Ne s'affiche que s'il y a quelque chose à traiter, pour ne pas encombrer le tableau de bord.
+function LeadsBanner() {
+  const [stats, setStats] = useState(null);
+  useEffect(() => { api.get('/leads/stats').then(setStats).catch(() => {}); }, []);
+  if (!stats) return null;
+  const { signaux_a_traiter: s, contacts_7j: c, briefs_7j: b } = stats;
+  if (!s && !c && !b) return null;
+  const parts = [];
+  if (s) parts.push(`${s} signal${s > 1 ? 'aux' : ''} de recrutement à traiter`);
+  if (c) parts.push(`${c} contact${c > 1 ? 's' : ''} trouvé${c > 1 ? 's' : ''} cette semaine`);
+  if (b) parts.push(`${b} brief${b > 1 ? 's' : ''} cette semaine`);
+  return (
+    <Link to="/leads" className="card p-4 flex items-center justify-between gap-4 hover:shadow-card-hover transition-shadow border-brand-100 bg-brand-50/40">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-brand-700">Nouveaux leads détectés par vos agents</p>
+        <p className="text-sm text-slate2-600 mt-0.5">{parts.join(' · ')}</p>
+      </div>
+      <span className="btn btn-primary shrink-0">Voir</span>
+    </Link>
+  );
+}
+
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -347,6 +370,8 @@ export default function Dashboard() {
         <h1 className="text-2xl font-heading font-semibold text-slate2-900">Tableau de bord</h1>
         <p className="text-slate2-500 text-sm mt-1">Vue d'ensemble de l'activité commerciale Neogia</p>
       </div>
+
+      <LeadsBanner />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard icon={Building2} label="Clients (entreprises)" value={totaux.entreprises} color="#4527EA" onClick={() => navigate('/clients?view=entreprises')} />

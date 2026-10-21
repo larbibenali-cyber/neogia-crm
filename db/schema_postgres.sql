@@ -252,3 +252,15 @@ BEGIN
     );
   END LOOP;
 END $$;
+
+-- Briefs de compte générés par l'agent Claude « brief-compte » (page Leads détectés).
+CREATE TABLE IF NOT EXISTS agent_briefs (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  entreprise_id BIGINT REFERENCES entreprises(id) ON DELETE SET NULL,
+  entreprise_nom TEXT NOT NULL,
+  titre TEXT NOT NULL,
+  contenu TEXT NOT NULL,
+  archived BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS agent_briefs_entreprise_idx ON agent_briefs(entreprise_id);
