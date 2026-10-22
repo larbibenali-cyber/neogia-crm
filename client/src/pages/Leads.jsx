@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, NavLink, useSearchParams } from 'react-router-dom';
 import {
   Radar, Building2, ExternalLink, Check, X, RotateCcw, FileText, Users, Copy, Linkedin, Trash2, Sparkles, Calendar,
 } from 'lucide-react';
@@ -10,18 +10,18 @@ import { formatDate } from '../lib/format';
 import { useToast } from '../lib/ToastContext';
 import { useConfirm } from '../lib/ConfirmContext';
 
-// Page « Leads détectés » : affiche ce que les agents Claude (brief de compte,
-// détection de signaux, recherche de contacts) ont écrit dans la base. Les
+// Page « Leads détectés » : affiche ce que l'agent Claude de détection de leads
+// (signaux de recrutement, recherche de contacts) a écrit dans la base. Les
 // agents se lancent depuis Claude ; ici on consulte, qualifie ou écarte.
+// Les briefs de compte ont leur propre page (Briefs.jsx) ; les annonces des
+// job boards aussi (BesoinsScrappes.jsx). Les composants communs sont exportés.
 
 const TABS = [
   { key: 'signaux', label: 'Signaux de recrutement', icon: Radar },
   { key: 'contacts', label: 'Contacts trouvés', icon: Users },
-  { key: 'briefs', label: 'Briefs de compte', icon: FileText },
 ];
 
 const PROMPTS = [
-  { label: 'Brief de compte', text: 'Fais-moi un brief sur [entreprise]' },
   { label: 'Signaux', text: 'Cherche les signaux de recrutement sur la banque et l\'assurance' },
   { label: 'Contacts', text: 'Trouve les contacts QA et Data chez [entreprise 1], [entreprise 2]' },
 ];
@@ -91,17 +91,11 @@ export default function Leads() {
   const [params, setParams] = useSearchParams();
   const tab = TABS.some((t) => t.key === params.get('tab')) ? params.get('tab') : 'signaux';
   const [stats, setStats] = useState(null);
-  const toast = useToast();
 
   const loadStats = useCallback(() => {
     api.get('/leads/stats').then(setStats).catch(() => setStats(null));
   }, []);
   useEffect(() => { loadStats(); }, [loadStats]);
-
-  const copy = async (text) => {
-    try { await navigator.clipboard.writeText(text); toast('Phrase copiée — collez-la dans Claude.', 'success'); }
-    catch { toast('Copie impossible, sélectionnez le texte à la main.', 'error'); }
-  };
 
   return (
     <div className="space-y-5">
@@ -110,32 +104,17 @@ export default function Leads() {
         <p className="text-slate2-500 text-sm mt-1">Ce que vos agents ont trouvé : à qualifier ou à écarter.</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <AgentsSubNav />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <StatCard icon={Radar} label="Signaux à traiter" value={stats?.signaux_a_traiter} sub={stats ? `${stats.signaux_7j} cette semaine` : ''} onClick={() => setParams({ tab: 'signaux' })} />
         <StatCard icon={Users} label="Contacts trouvés" value={stats?.contacts_total} sub={stats ? `${stats.contacts_7j} cette semaine` : ''} onClick={() => setParams({ tab: 'contacts' })} />
-        <StatCard icon={FileText} label="Briefs de compte" value={stats?.briefs_total} sub={stats ? `${stats.briefs_7j} cette semaine` : ''} onClick={() => setParams({ tab: 'briefs' })} />
       </div>
 
-      <div className="card p-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate2-800">
-          <Sparkles size={16} className="text-brand" /> Lancer un agent
-        </div>
-        <p className="text-xs text-slate2-500 mt-1">
-          Les agents tournent dans Claude. Copiez une phrase, collez-la dans Claude, validez la liste proposée : les résultats arrivent ici.
-          La recherche de signaux tourne aussi automatiquement chaque lundi matin.
-        </p>
-        <div className="flex flex-wrap gap-2 mt-3">
-          {PROMPTS.map((p) => (
-            <button key={p.label} onClick={() => copy(p.text)} className="btn btn-secondary text-left" title={p.text}>
-              <Copy size={14} /> <span className="font-medium">{p.label}</span>
-              <span className="hidden lg:inline text-slate2-500 font-normal">· « {p.text} »</span>
-            </button>
-          ))}
-          <a href="https://claude.ai/new" target="_blank" rel="noopener noreferrer" className="btn btn-primary">
-            <ExternalLink size={14} /> Ouvrir Claude
-          </a>
-        </div>
-      </div>
+      <AgentLauncher
+        prompts={PROMPTS}
+        note="Les agents tournent dans Claude. Copiez une phrase, collez-la dans Claude, validez la liste proposée : les résultats arrivent ici. La recherche de signaux tourne aussi automatiquement chaque lundi matin."
+      />
 
       <div className="flex flex-wrap border-b border-slate2-100">
         {TABS.map((t) => (
@@ -151,12 +130,63 @@ export default function Leads() {
 
       {tab === 'signaux' && <SignauxTab onChange={loadStats} />}
       {tab === 'contacts' && <ContactsTab onChange={loadStats} />}
-      {tab === 'briefs' && <BriefsTab onChange={loadStats} />}
     </div>
   );
 }
 
-function StatCard({ icon: Icon, label, value, sub, onClick }) {
+// Bandeau « Lancer un agent » : phrases à copier dans Claude.
+export function AgentLauncher({ prompts, note }) {
+  const toast = useToast();
+  const copy = async (text) => {
+    try { await navigator.clipboard.writeText(text); toast('Phrase copiée — collez-la dans Claude.', 'success'); }
+    catch { toast('Copie impossible, sélectionnez le texte à la main.', 'error'); }
+  };
+  return (
+    <div className="card p-4">
+      <div className="flex items-center gap-2 text-sm font-medium text-slate2-800">
+        <Sparkles size={16} className="text-brand" /> Lancer l'agent
+      </div>
+      <p className="text-xs text-slate2-500 mt-1">{note}</p>
+      <div className="flex flex-wrap gap-2 mt-3">
+        {prompts.map((p) => (
+          <button key={p.label} onClick={() => copy(p.text)} className="btn btn-secondary text-left" title={p.text}>
+            <Copy size={14} /> <span className="font-medium">{p.label}</span>
+            <span className="hidden lg:inline text-slate2-500 font-normal">· « {p.text} »</span>
+          </button>
+        ))}
+        <a href="https://claude.ai/new" target="_blank" rel="noopener noreferrer" className="btn btn-primary">
+          <ExternalLink size={14} /> Ouvrir Claude
+        </a>
+      </div>
+    </div>
+  );
+}
+
+// Sur mobile, la barre du bas n'a qu'une entrée « Agents » : ce sélecteur
+// permet de passer d'une page d'agent à l'autre (masqué sur desktop, où les
+// trois pages sont dans le menu de gauche).
+export function AgentsSubNav() {
+  const items = [
+    { to: '/besoins-scrappes', label: 'Besoins scrappés' },
+    { to: '/leads', label: 'Leads détectés' },
+    { to: '/briefs', label: 'Briefs de compte' },
+  ];
+  return (
+    <div className="md:hidden flex gap-2 overflow-x-auto -mx-1 px-1">
+      {items.map((i) => (
+        <NavLink
+          key={i.to}
+          to={i.to}
+          className={({ isActive }) => `whitespace-nowrap px-3 py-1.5 rounded-full text-sm font-medium ${isActive ? 'bg-brand text-white' : 'bg-slate2-50 text-slate2-600'}`}
+        >
+          {i.label}
+        </NavLink>
+      ))}
+    </div>
+  );
+}
+
+export function StatCard({ icon: Icon, label, value, sub, onClick }) {
   return (
     <button onClick={onClick} className="card p-4 text-left hover:shadow-card-hover transition-shadow">
       <div className="flex items-center gap-2 text-xs font-medium text-slate2-500"><Icon size={14} /> {label}</div>
@@ -166,7 +196,7 @@ function StatCard({ icon: Icon, label, value, sub, onClick }) {
   );
 }
 
-function SubFilters({ options, value, onChange }) {
+export function SubFilters({ options, value, onChange }) {
   return (
     <div className="flex flex-wrap gap-2">
       {options.map((o) => (
@@ -182,7 +212,7 @@ function SubFilters({ options, value, onChange }) {
   );
 }
 
-function useList(path, deps) {
+export function useList(path, deps) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -349,7 +379,7 @@ function ContactsTab({ onChange }) {
 
 // ------------------------------------------------------------------ onglet briefs
 
-function BriefsTab({ onChange }) {
+export function BriefsTab({ onChange }) {
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(null);
   const toast = useToast();

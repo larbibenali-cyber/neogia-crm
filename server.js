@@ -59,6 +59,7 @@ app.use('/api/gmail', require('./server/routes/gmail'));
 app.use('/api/email-templates', require('./server/routes/emailTemplates'));
 app.use('/api/settings', require('./server/routes/settings'));
 app.use('/api/leads', require('./server/routes/leads'));
+app.use('/api/annonces', require('./server/routes/annonces'));
 
 // ---- Frontend statique (build Vite) ----
 // Le frontend applique lui-même sa propre protection (redirection vers /login

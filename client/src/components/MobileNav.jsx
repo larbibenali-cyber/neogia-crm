@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Building2, UserSquare2, Briefcase, History, Settings, Radar } from 'lucide-react';
 
 // Navigation mobile (bas d'écran), affichée uniquement en dessous du
@@ -10,25 +10,27 @@ const NAV = [
   { to: '/clients', label: 'Clients', icon: Building2 },
   { to: '/candidats', label: 'Candidats', icon: UserSquare2 },
   { to: '/besoins', label: 'Besoins', icon: Briefcase },
-  { to: '/leads', label: 'Leads', icon: Radar },
   { to: '/echanges', label: 'Échanges', icon: History },
+  // Une seule entrée pour les trois pages d'agents (sélecteur en haut de chaque page).
+  { to: '/besoins-scrappes', label: 'Agents', icon: Radar, match: ['/besoins-scrappes', '/leads', '/briefs'] },
   { to: '/parametres', label: 'Réglages', icon: Settings },
 ];
 
 export default function MobileNav() {
+  const { pathname } = useLocation();
   return (
     <nav
       className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-slate2-100 flex items-stretch"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      {NAV.map(({ to, label, icon: Icon, end }) => (
+      {NAV.map(({ to, label, icon: Icon, end, match }) => (
         <NavLink
           key={to}
           to={to}
           end={end}
           className={({ isActive }) =>
             `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-[52px] text-[11px] font-medium ${
-              isActive ? 'text-brand-700' : 'text-slate2-500'
+              isActive || (match && match.some((m) => pathname.startsWith(m))) ? 'text-brand-700' : 'text-slate2-500'
             }`
           }
         >

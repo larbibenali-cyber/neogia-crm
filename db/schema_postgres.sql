@@ -264,3 +264,62 @@ CREATE TABLE IF NOT EXISTS agent_briefs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS agent_briefs_entreprise_idx ON agent_briefs(entreprise_id);
+
+-- ==========================================================================
+-- Agent « Besoins scrappés » : annonces Data/IA publiées sur les job boards
+-- (Free-Work, Monster, Indeed…) et attribution probable au client final.
+-- Écrites par l'agent Claude « attribution-annonces », jamais dans `besoins`.
+-- ==========================================================================
+
+-- Périmètres connus des clients : noms d'équipes (« Datalab », « Data Factory »…),
+-- technos, sites, vocabulaire. Servent à deviner le client derrière une annonce anonyme.
+CREATE TABLE IF NOT EXISTS client_perimetres (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  entreprise_id BIGINT NOT NULL REFERENCES entreprises(id) ON DELETE CASCADE,
+  nom_equipe TEXT NOT NULL,                      -- ex. « Datalab », « DSI Groupe – Data Office »
+  alias TEXT[] NOT NULL DEFAULT '{}',            -- autres appellations de la même équipe
+  direction TEXT,                                -- ex. « Direction Risques », « Marketing client »
+  sites TEXT[] NOT NULL DEFAULT '{}',            -- villes / sites (« Lyon Part-Dieu », « La Défense »)
+  technologies TEXT[] NOT NULL DEFAULT '{}',     -- stack connue (« Snowflake », « Talend »…)
+  mots_cles TEXT[] NOT NULL DEFAULT '{}',        -- tournures typiques des AO de ce client
+  description TEXT,
+  source TEXT NOT NULL DEFAULT 'Agent – CRM',    -- « Agent – CRM », « Larbi », « Agent – annonce »
+  valide BOOLEAN NOT NULL DEFAULT false,         -- validé par Larbi
+  archived BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS client_perimetres_entreprise_idx ON client_perimetres(entreprise_id);
+
+CREATE TABLE IF NOT EXISTS annonces_scrapees (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  site TEXT NOT NULL,                            -- « Free-Work », « Monster », « Indeed »…
+  url TEXT NOT NULL UNIQUE,
+  titre TEXT NOT NULL,
+  intermediaire TEXT,                            -- cabinet / ESN qui publie l'annonce
+  localisation TEXT,
+  type_contrat TEXT,                             -- Freelance, CDI, Portage…
+  tjm TEXT,
+  duree TEXT,
+  date_publication DATE,
+  extrait TEXT,                                  -- passage(s) utiles de l'annonce
+  indices JSONB NOT NULL DEFAULT '[]',           -- [{type, valeur, citation}]
+  client_nomme BOOLEAN NOT NULL DEFAULT false,   -- le client est cité en clair dans l'annonce
+  hypotheses JSONB NOT NULL DEFAULT '[]',        -- [{entreprise_id, entreprise_nom, probabilite, raisons}] trié décroissant
+  entreprise_id BIGINT REFERENCES entreprises(id) ON DELETE SET NULL, -- meilleure hypothèse
+  confiance INTEGER,                             -- probabilité (0-100) de la meilleure hypothèse
+  statut TEXT NOT NULL DEFAULT 'a_traiter',      -- a_traiter | confirmee | ecartee
+  entreprise_confirmee_id BIGINT REFERENCES entreprises(id) ON DELETE SET NULL, -- client réel confirmé par Larbi
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS annonces_scrapees_statut_idx ON annonces_scrapees(statut, created_at DESC);
+CREATE INDEX IF NOT EXISTS annonces_scrapees_entreprise_idx ON annonces_scrapees(entreprise_id);
+
+ALTER TABLE client_perimetres ENABLE ROW LEVEL SECURITY;
+ALTER TABLE annonces_scrapees ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS authenticated_full_access ON client_perimetres;
+CREATE POLICY authenticated_full_access ON client_perimetres FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS authenticated_full_access ON annonces_scrapees;
+CREATE POLICY authenticated_full_access ON annonces_scrapees FOR ALL TO authenticated USING (true) WITH CHECK (true);

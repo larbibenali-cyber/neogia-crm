@@ -16,6 +16,8 @@ import Echanges from './pages/Echanges';
 import EmailTemplates from './pages/EmailTemplates';
 import Parametres from './pages/Parametres';
 import Leads from './pages/Leads';
+import Briefs from './pages/Briefs';
+import BesoinsScrappes from './pages/BesoinsScrappes';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import { AuthProvider, useAuth } from './lib/AuthContext';
@@ -64,6 +66,8 @@ function AppShell() {
             <Route path="/besoins/:id" element={<BesoinDetail />} />
             <Route path="/echanges" element={<Echanges />} />
             <Route path="/leads" element={<Leads />} />
+            <Route path="/briefs" element={<Briefs />} />
+            <Route path="/besoins-scrappes" element={<BesoinsScrappes />} />
             <Route path="/modeles-email" element={<EmailTemplates />} />
             <Route path="/parametres" element={<Parametres />} />
             <Route path="*" element={<Navigate to="/" replace />} />
