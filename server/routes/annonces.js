@@ -52,7 +52,7 @@ router.get('/', async (req, res, next) => {
     const results = await dbAll(`
       SELECT a.*, e.nom AS entreprise_nom, ec.nom AS entreprise_confirmee_nom
       ${from} ${w}
-      ORDER BY a.client_nomme DESC, COALESCE(a.confiance, 0) DESC, COALESCE(a.date_publication, a.created_at::date) DESC, a.id DESC
+      ORDER BY COALESCE(a.date_publication, a.created_at::date) DESC, a.client_nomme DESC, COALESCE(a.confiance, 0) DESC, a.id DESC
       LIMIT @limit OFFSET @offset
     `, { ...params, limit: pageSize, offset });
     const sites = await dbAll(`SELECT site, COUNT(*)::int n FROM annonces_scrapees GROUP BY site ORDER BY n DESC`);

@@ -142,16 +142,30 @@ function AnnoncesTab({ onChange }) {
       )}
       {!loading && !error && data && data.results.length > 0 && (
         <div className="space-y-2">
-          {data.results.map((a) => (
+          {data.results.map((a, i) => {
+            const jour = jourDe(a);
+            const nouveauJour = i === 0 || jourDe(data.results[i - 1]) !== jour;
+            const nb = data.results.filter((x) => jourDe(x) === jour).length;
+            return (
+            <React.Fragment key={a.id}>
+            {nouveauJour && (
+              <div className="flex items-center gap-2 pt-3 pb-1 first:pt-0">
+                <Calendar size={14} className="text-brand" />
+                <h3 className="text-sm font-semibold text-slate2-700 first-letter:uppercase">{libelleJour(jour)}</h3>
+                <span className="text-xs text-slate2-400">{nb} annonce{nb > 1 ? 's' : ''}</span>
+                <div className="flex-1 border-t border-slate2-100" />
+              </div>
+            )}
             <AnnonceCard
-              key={a.id}
               a={a}
               onConfirm={(eid, nom) => act(a.id, 'confirmer', { entreprise_id: eid }, `Attribution confirmée : ${nom}.`)}
               onAutre={() => setAutre(a)}
               onEcarter={() => act(a.id, 'ecarter', null, 'Annonce écartée.')}
               onRestaurer={() => act(a.id, 'restaurer', null, 'Annonce remise à traiter.')}
             />
-          ))}
+            </React.Fragment>
+            );
+          })}
         </div>
       )}
       {!loading && !error && data && <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onChange={setPage} />}
@@ -163,6 +177,22 @@ function AnnoncesTab({ onChange }) {
       />
     </div>
   );
+}
+
+// Jour de parution (AAAA-MM-JJ) : sert à empiler les annonces par jour, les plus récentes en haut.
+function jourDe(a) {
+  return String(a.date_publication || a.created_at || '').slice(0, 10);
+}
+
+function libelleJour(jour) {
+  if (!jour) return 'Date inconnue';
+  const d = new Date(`${jour}T12:00:00`);
+  const auj = new Date(); auj.setHours(12, 0, 0, 0);
+  const ecart = Math.round((auj - d) / 86400000);
+  const txt = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  if (ecart === 0) return `Aujourd'hui — ${txt}`;
+  if (ecart === 1) return `Hier — ${txt}`;
+  return txt;
 }
 
 function AnnonceCard({ a, onConfirm, onAutre, onEcarter, onRestaurer }) {
