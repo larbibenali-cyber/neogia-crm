@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  ScanSearch, Building2, ExternalLink, Check, X, RotateCcw, Calendar, MapPin, Target, Pencil, Trash2, Plus, ShieldCheck, ChevronDown, ChevronUp,
+  ScanSearch, Building2, ExternalLink, Check, X, RotateCcw, Calendar, MapPin, Target, Pencil, Trash2, Plus, ShieldCheck, ChevronDown, ChevronUp, Linkedin, Users,
 } from 'lucide-react';
 import { api, qs } from '../lib/api';
 import { Loading, EmptyState, Pagination, Modal, Field } from '../components/ui';
@@ -199,6 +199,7 @@ function AnnonceCard({ a, onConfirm, onAutre, onEcarter, onRestaurer }) {
   const [open, setOpen] = useState(false);
   const hypotheses = Array.isArray(a.hypotheses) ? a.hypotheses : [];
   const indices = Array.isArray(a.indices) ? a.indices : [];
+  const decideurs = Array.isArray(a.decideurs) ? a.decideurs : [];
   const meta = [a.localisation, a.type_contrat, a.tjm && `TJM ${a.tjm}`, a.duree].filter(Boolean);
 
   return (
@@ -253,6 +254,31 @@ function AnnonceCard({ a, onConfirm, onAutre, onEcarter, onRestaurer }) {
 
           {hypotheses.length === 0 && !a.client_nomme && (
             <p className="mt-3 text-sm text-slate2-500">Aucun client du CRM ne correspond aux indices de cette annonce.</p>
+          )}
+
+          {decideurs.length > 0 && (
+            <div className="mt-3 rounded-lg border border-slate2-100 bg-slate2-50/60 px-3 py-2">
+              <div className="text-xs font-medium text-slate2-500 flex items-center gap-1 mb-1.5"><Users size={12} /> Décideurs probables (profils LinkedIn publics)</div>
+              <div className="space-y-1.5">
+                {decideurs.map((d, i) => (
+                  <div key={`${d.linkedin || d.nom}-${i}`} className="flex items-start gap-2">
+                    <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${d.pertinence === 'forte' ? 'bg-emerald-500' : d.pertinence === 'moyenne' ? 'bg-amber-400' : 'bg-slate2-300'}`} title={`Pertinence ${d.pertinence || '?'}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm">
+                        <span className="font-medium text-slate2-800">{d.nom}</span>
+                        {d.poste && <span className="text-slate2-500"> · {d.poste}</span>}
+                      </div>
+                      {d.raison && <p className="text-xs text-slate2-500">{d.raison}</p>}
+                    </div>
+                    {d.linkedin && (
+                      <a href={d.linkedin} target="_blank" rel="noopener noreferrer" className="btn btn-ghost text-xs py-1 shrink-0" title="Ouvrir le profil LinkedIn">
+                        <Linkedin size={12} /> Profil
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {indices.length > 0 && (
