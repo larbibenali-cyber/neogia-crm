@@ -323,3 +323,6 @@ DROP POLICY IF EXISTS authenticated_full_access ON client_perimetres;
 CREATE POLICY authenticated_full_access ON client_perimetres FOR ALL TO authenticated USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS authenticated_full_access ON annonces_scrapees;
 CREATE POLICY authenticated_full_access ON annonces_scrapees FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Décideurs probables (profils LinkedIn publics) trouvés par l'agent pour les annonces avec client cité
+ALTER TABLE annonces_scrapees ADD COLUMN IF NOT EXISTS decideurs jsonb NOT NULL DEFAULT '[]'::jsonb;
