@@ -258,15 +258,20 @@ function AnnonceCard({ a, onConfirm, onAutre, onEcarter, onRestaurer }) {
 
           {decideurs.length > 0 && (
             <div className="mt-3 rounded-lg border border-slate2-100 bg-slate2-50/60 px-3 py-2">
-              <div className="text-xs font-medium text-slate2-500 flex items-center gap-1 mb-1.5"><Users size={12} /> Décideurs probables (profils LinkedIn publics)</div>
+              <div className="text-xs font-medium text-slate2-500 flex items-center gap-1 mb-1.5"><Users size={12} /> Décideurs probables</div>
               <div className="space-y-1.5">
                 {decideurs.map((d, i) => (
                   <div key={`${d.linkedin || d.nom}-${i}`} className="flex items-start gap-2">
                     <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${d.pertinence === 'forte' ? 'bg-emerald-500' : d.pertinence === 'moyenne' ? 'bg-amber-400' : 'bg-slate2-300'}`} title={`Pertinence ${d.pertinence || '?'}`} />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm">
-                        <span className="font-medium text-slate2-800">{d.nom}</span>
+                        {d.contact_id
+                          ? <Link to={`/clients/contact/${d.contact_id}`} className="font-medium text-slate2-800 hover:text-brand">{d.nom}</Link>
+                          : <span className="font-medium text-slate2-800">{d.nom}</span>}
                         {d.poste && <span className="text-slate2-500"> · {d.poste}</span>}
+                        {d.contact_id
+                          ? <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium align-middle">Dans ton CRM</span>
+                          : <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700 font-medium align-middle">Nouveau</span>}
                       </div>
                       {d.raison && <p className="text-xs text-slate2-500">{d.raison}</p>}
                     </div>
