@@ -92,8 +92,29 @@ router.post('/import', async (req, res, next) => {
     const email = b.email !== undefined ? String(b.email).trim().toLowerCase() : undefined;
     const mobilesSupp = b.mobiles_supplementaires !== undefined ? toStringArray(b.mobiles_supplementaires) : undefined;
 
+    // Un contact de la même entreprise a peut-être déjà cet email (fiche
+    // archivée, ou nom orthographié autrement : la recherche par nom ne l'a
+    // pas trouvé). L'index unique (entreprise_id, email_normalise) refuserait
+    // alors l'import : on met plutôt à jour cette fiche (et on la désarchive).
+    if (email && !(b.contactId && b.updateExisting)) {
+      const sameEmail = await dbGet(
+        'SELECT id FROM contacts WHERE entreprise_id = @e AND email_normalise = @m LIMIT 1',
+        { e: entrepriseId, m: email },
+      );
+      if (sameEmail) { b.contactId = sameEmail.id; b.updateExisting = true; b.mergedByEmail = true; }
+    }
+
     let contact;
     if (b.contactId && b.updateExisting) {
+      if (email) {
+        const clash = await dbGet(
+          'SELECT id, prenom, nom FROM contacts WHERE entreprise_id = @e AND email_normalise = @m AND id <> @id LIMIT 1',
+          { e: entrepriseId, m: email, id: b.contactId },
+        );
+        if (clash) {
+          return res.status(409).json({ error: `Cet email est déjà utilisé par ${[clash.prenom, clash.nom].filter(Boolean).join(' ') || 'un autre contact'} dans cette entreprise (fiche n° ${clash.id}).` });
+        }
+      }
       const existing = await dbGet('SELECT * FROM contacts WHERE id = ?', [b.contactId]);
       if (!existing) return res.status(404).json({ error: 'Contact introuvable.' });
       await dbRun(`
@@ -101,7 +122,7 @@ router.post('/import', async (req, res, next) => {
           fonction = @fonction, localisation = @localisation, linkedin_url = @linkedin_url,
           email = @email, email_normalise = @email_normalise, telephone_mobile = @telephone_mobile,
           mobiles_supplementaires = @mobiles_supplementaires,
-          entreprise_id = @entreprise_id, updated_at = now()
+          entreprise_id = @entreprise_id, archived = false, updated_at = now()
         WHERE id = @id
       `, {
         id: b.contactId,
@@ -139,7 +160,10 @@ router.post('/import', async (req, res, next) => {
       contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [row.id]);
     }
 
-    res.status(201).json({ contact, entreprise_id: entrepriseId, fiche_url: `/clients/contact/${contact.id}` });
+    res.status(201).json({
+      contact, entreprise_id: entrepriseId, fiche_url: `/clients/contact/${contact.id}`,
+      ...(b.mergedByEmail ? { info: 'Un contact avec cet email existait déjà dans cette entreprise : sa fiche a été mise à jour.' } : {}),
+    });
   } catch (err) { next(err); }
 });
 
