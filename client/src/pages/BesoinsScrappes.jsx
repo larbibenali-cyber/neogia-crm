@@ -98,7 +98,7 @@ function AnnoncesTab({ onChange }) {
   const [page, setPage] = useState(1);
   const [autre, setAutre] = useState(null); // annonce pour laquelle on choisit un autre client
   const toast = useToast();
-  const path = `/annonces${qs({ vue, force, site, search, page })}`;
+  const path = `/annonces${qs({ vue, force, site, search, page, pageSize: 100 })}`;
   const { data, loading, error, load } = useList(path, [path]);
 
   const act = async (id, action, body, msg) => {
