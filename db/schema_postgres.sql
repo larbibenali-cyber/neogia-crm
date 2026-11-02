@@ -326,3 +326,10 @@ CREATE POLICY authenticated_full_access ON annonces_scrapees FOR ALL TO authenti
 
 -- Décideurs probables (profils LinkedIn publics) trouvés par l'agent pour les annonces avec client cité
 ALTER TABLE annonces_scrapees ADD COLUMN IF NOT EXISTS decideurs jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+-- Accès référencement (facilité à travailler en direct avec le client)
+ALTER TABLE entreprises ADD COLUMN IF NOT EXISTS acces_referencement text CHECK (acces_referencement IN ('facile','moyen','difficile'));
+ALTER TABLE entreprises ADD COLUMN IF NOT EXISTS acces_referencement_manuel boolean NOT NULL DEFAULT false;
+ALTER TABLE entreprises ADD COLUMN IF NOT EXISTS acces_referencement_raison text;
+ALTER TABLE annonces_scrapees ADD COLUMN IF NOT EXISTS acces text CHECK (acces IN ('facile','moyen','difficile'));
+ALTER TABLE annonces_scrapees ADD COLUMN IF NOT EXISTS acces_raison text;

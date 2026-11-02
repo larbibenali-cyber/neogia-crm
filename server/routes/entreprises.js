@@ -157,12 +157,25 @@ router.put('/:id', async (req, res, next) => {
     const existing = await dbGet('SELECT * FROM entreprises WHERE id = ?', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Entreprise introuvable' });
     const b = req.body;
+    // Accès référencement : un choix fait depuis la fiche est « manuel » et
+    // l'agent ne le modifie plus ; « auto » rend la main à l'agent.
+    let acces = existing.acces_referencement, accesManuel = existing.acces_referencement_manuel, accesRaison = existing.acces_referencement_raison;
+    if (b.acces_referencement !== undefined && b.acces_referencement !== existing.acces_referencement) {
+      if (b.acces_referencement === 'auto' || b.acces_referencement === '' || b.acces_referencement === null) { accesManuel = false; }
+      else if (['facile', 'moyen', 'difficile'].includes(b.acces_referencement)) { acces = b.acces_referencement; accesManuel = true; }
+    }
+    if (b.acces_referencement_raison !== undefined && b.acces_referencement_raison !== existing.acces_referencement_raison) {
+      accesRaison = b.acces_referencement_raison || null;
+      if (acces) accesManuel = accesManuel || b.acces_referencement !== 'auto';
+    }
     await dbRun(`
-      UPDATE entreprises SET nom=@nom, secteur=@secteur, adresse=@adresse, site_web=@site_web, notes=@notes, statut=@statut, updated_at=now()
+      UPDATE entreprises SET nom=@nom, secteur=@secteur, adresse=@adresse, site_web=@site_web, notes=@notes, statut=@statut,
+        acces_referencement=@acces, acces_referencement_manuel=@acces_manuel, acces_referencement_raison=@acces_raison, updated_at=now()
       WHERE id=@id
     `, {
       id: req.params.id, nom: b.nom ?? existing.nom, secteur: b.secteur ?? existing.secteur, adresse: b.adresse ?? existing.adresse,
       site_web: b.site_web ?? existing.site_web, notes: b.notes ?? existing.notes, statut: b.statut ?? existing.statut,
+      acces, acces_manuel: accesManuel, acces_raison: accesRaison,
     });
     res.json(await attachExtras(await dbGet('SELECT * FROM entreprises WHERE id = ?', [req.params.id])));
   } catch (err) { next(err); }

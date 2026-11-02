@@ -93,12 +93,14 @@ function ProbaBar({ value }) {
 function AnnoncesTab({ onChange }) {
   const [vue, setVue] = useState('a_traiter');
   const [force, setForce] = useState('');
+  const [acces, setAcces] = useState('');
+  const [tri, setTri] = useState('date');
   const [site, setSite] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [autre, setAutre] = useState(null); // annonce pour laquelle on choisit un autre client
   const toast = useToast();
-  const path = `/annonces${qs({ vue, force, site, search, page, pageSize: 100 })}`;
+  const path = `/annonces${qs({ vue, force, acces, tri, site, search, page, pageSize: 100 })}`;
   const { data, loading, error, load } = useList(path, [path]);
 
   const act = async (id, action, body, msg) => {
@@ -123,6 +125,18 @@ function AnnoncesTab({ onChange }) {
             <option value="">Toutes attributions</option>
             <option value="fortes">Fortes (cité ou ≥ 70 %)</option>
           </select>
+          <select className="input w-auto" value={acces} onChange={(e) => { setAcces(e.target.value); setPage(1); }} title="Facilité d'accès au client (référencement fournisseurs)">
+            <option value="">Tous accès référencement</option>
+            <option value="accessibles">Accessibles (facile + moyen)</option>
+            <option value="facile">🟢 Facile</option>
+            <option value="moyen">🟠 Moyen</option>
+            <option value="difficile">🔴 Difficile</option>
+            <option value="non_evalue">Non évalué</option>
+          </select>
+          <select className="input w-auto" value={tri} onChange={(e) => { setTri(e.target.value); setPage(1); }}>
+            <option value="date">Tri : par jour (accessibles en tête)</option>
+            <option value="acces">Tri : les plus accessibles d'abord</option>
+          </select>
           <select className="input w-auto" value={site} onChange={(e) => { setSite(e.target.value); setPage(1); }}>
             <option value="">Tous les sites</option>
             {(data?.sites || []).map((s) => <option key={s.site} value={s.site}>{s.site} ({s.n})</option>)}
@@ -144,7 +158,7 @@ function AnnoncesTab({ onChange }) {
         <div className="space-y-2">
           {data.results.map((a, i) => {
             const jour = jourDe(a);
-            const nouveauJour = i === 0 || jourDe(data.results[i - 1]) !== jour;
+            const nouveauJour = tri === 'date' && (i === 0 || jourDe(data.results[i - 1]) !== jour);
             const nb = data.results.filter((x) => jourDe(x) === jour).length;
             return (
             <React.Fragment key={a.id}>
@@ -195,6 +209,22 @@ function libelleJour(jour) {
   return txt;
 }
 
+const ACCES_STYLES = {
+  facile: { label: 'Accès facile', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
+  moyen: { label: 'Accès moyen', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-400' },
+  difficile: { label: 'Référencement difficile', cls: 'bg-rose-50 text-rose-700', dot: 'bg-rose-500' },
+};
+
+export function AccesBadge({ niveau, raison, manuel }) {
+  const st = ACCES_STYLES[niveau];
+  if (!st) return null;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium ${st.cls}`} title={(raison || '') + (manuel ? ' (choix manuel)' : '')}>
+      <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />{st.label}{manuel ? ' ✎' : ''}
+    </span>
+  );
+}
+
 function AnnonceCard({ a, onConfirm, onAutre, onEcarter, onRestaurer }) {
   const [open, setOpen] = useState(false);
   const hypotheses = Array.isArray(a.hypotheses) ? a.hypotheses : [];
@@ -208,6 +238,7 @@ function AnnonceCard({ a, onConfirm, onAutre, onEcarter, onRestaurer }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap text-xs text-slate2-400">
             <span className="px-2 py-0.5 rounded-full bg-slate2-50 text-slate2-600 font-medium">{a.site}</span>
+            <AccesBadge niveau={a.acces_effectif} raison={a.acces_raison_effective} manuel={a.acces_manuel} />
             {a.intermediaire && <span>publiée par <span className="text-slate2-600">{a.intermediaire}</span></span>}
             <span className="flex items-center gap-1"><Calendar size={11} />{formatDate(a.date_publication || a.created_at)}</span>
           </div>

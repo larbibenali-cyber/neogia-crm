@@ -31,7 +31,7 @@ router.get('/stats', async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try {
-    const { vue = 'a_traiter', search, site, force } = req.query;
+    const { vue = 'a_traiter', search, site, force, acces, tri = 'date' } = req.query;
     const { page, pageSize, offset } = paginate(req.query);
     const where = [];
     const params = {};
@@ -40,6 +40,12 @@ router.get('/', async (req, res, next) => {
     else if (vue !== 'toutes') where.push(`a.statut = 'a_traiter'`);
     if (site) { where.push(`a.site = @site`); params.site = site; }
     if (force === 'fortes') where.push(`(a.client_nomme OR a.confiance >= 70)`);
+    // Accès référencement effectif : le choix manuel sur la fiche entreprise
+    // l'emporte, sinon l'estimation de l'agent sur l'annonce, sinon celle de la fiche.
+    const ACCES = `(CASE WHEN e.acces_referencement_manuel THEN e.acces_referencement ELSE COALESCE(a.acces, e.acces_referencement) END)`;
+    if (acces === 'facile' || acces === 'moyen' || acces === 'difficile') { where.push(`${ACCES} = @acces`); params.acces = acces; }
+    else if (acces === 'accessibles') where.push(`${ACCES} IN ('facile','moyen')`);
+    else if (acces === 'non_evalue') where.push(`${ACCES} IS NULL`);
     if (search) {
       where.push(`(a.titre ILIKE @s OR a.intermediaire ILIKE @s OR a.extrait ILIKE @s OR e.nom ILIKE @s OR a.hypotheses::text ILIKE @s)`);
       params.s = `%${search}%`;
@@ -50,9 +56,14 @@ router.get('/', async (req, res, next) => {
       LEFT JOIN entreprises ec ON ec.id = a.entreprise_confirmee_id`;
     const total = (await dbGet(`SELECT COUNT(*)::int c ${from} ${w}`, params)).c;
     const results = await dbAll(`
-      SELECT a.*, e.nom AS entreprise_nom, ec.nom AS entreprise_confirmee_nom
+      SELECT a.*, e.nom AS entreprise_nom, ec.nom AS entreprise_confirmee_nom,
+        ${ACCES} AS acces_effectif,
+        CASE WHEN e.acces_referencement_manuel THEN e.acces_referencement_raison ELSE COALESCE(a.acces_raison, e.acces_referencement_raison) END AS acces_raison_effective,
+        COALESCE(e.acces_referencement_manuel, false) AS acces_manuel
       ${from} ${w}
-      ORDER BY COALESCE(a.date_publication, a.created_at::date) DESC, a.client_nomme DESC, COALESCE(a.confiance, 0) DESC, a.id DESC
+      ORDER BY ${tri === 'acces' ? '' : 'COALESCE(a.date_publication, a.created_at::date) DESC,'}
+        CASE ${ACCES} WHEN 'facile' THEN 0 WHEN 'moyen' THEN 1 WHEN 'difficile' THEN 3 ELSE 2 END,
+        a.client_nomme DESC, COALESCE(a.confiance, 0) DESC, COALESCE(a.date_publication, a.created_at::date) DESC, a.id DESC
       LIMIT @limit OFFSET @offset
     `, { ...params, limit: pageSize, offset });
     const sites = await dbAll(`SELECT site, COUNT(*)::int n FROM annonces_scrapees GROUP BY site ORDER BY n DESC`);

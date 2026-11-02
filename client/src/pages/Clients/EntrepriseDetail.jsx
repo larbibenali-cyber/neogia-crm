@@ -14,6 +14,7 @@ import EchangeFormModal from '../../components/EchangeFormModal';
 import VoiceDictationButton from '../../components/VoiceDictationButton';
 import { timeAgo } from '../../lib/format';
 import { useToast } from '../../lib/ToastContext';
+import { AccesBadge } from '../BesoinsScrappes';
 
 export default function EntrepriseDetail() {
   const { id } = useParams();
@@ -95,6 +96,7 @@ export default function EntrepriseDetail() {
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-heading font-semibold text-slate2-900">{ent.nom}</h1>
               <EntrepriseStatusBadge statut={ent.statut} small />
+              <span className="text-xs"><AccesBadge niveau={ent.acces_referencement} raison={ent.acces_referencement_raison} manuel={ent.acces_referencement_manuel} /></span>
             </div>
             <p className="text-slate2-500 text-sm mt-1">{ent.secteur || 'Secteur non renseigné'} {ent.adresse ? `— ${ent.adresse}` : ''}</p>
             <div className="flex gap-4 mt-3 text-sm text-slate2-600">
@@ -212,7 +214,9 @@ export default function EntrepriseDetail() {
 function EditEntrepriseModal({ open, onClose, entreprise, onSaved }) {
   const [form, setForm] = useState({});
   const toast = useToast();
-  useEffect(() => { if (open) setForm(entreprise); }, [open, entreprise]);
+  useEffect(() => {
+    if (open) setForm({ ...entreprise, acces_referencement: entreprise.acces_referencement_manuel ? entreprise.acces_referencement : 'auto' });
+  }, [open, entreprise]);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const submit = async () => {
     try {
@@ -233,6 +237,17 @@ function EditEntrepriseModal({ open, onClose, entreprise, onSaved }) {
         </Select>
       </Field>
       <Field label="Secteur"><input className="input" value={form.secteur || ''} onChange={set('secteur')} /></Field>
+      <Field label="Accès référencement">
+        <Select value={form.acces_referencement || 'auto'} onChange={set('acces_referencement')}>
+          <option value="auto">Automatique (estimé par l'agent{entreprise?.acces_referencement && !entreprise?.acces_referencement_manuel ? ` : ${entreprise.acces_referencement}` : ''})</option>
+          <option value="facile">🟢 Facile</option>
+          <option value="moyen">🟠 Moyen</option>
+          <option value="difficile">🔴 Difficile</option>
+        </Select>
+      </Field>
+      {form.acces_referencement && form.acces_referencement !== 'auto' && (
+        <Field label="Pourquoi (facultatif)"><input className="input" placeholder="ex. sponsor chez le client, achat en direct possible" value={form.acces_referencement_raison || ''} onChange={set('acces_referencement_raison')} /></Field>
+      )}
       <Field label="Adresse"><input className="input" value={form.adresse || ''} onChange={set('adresse')} /></Field>
       <Field label="Site web"><input className="input" value={form.site_web || ''} onChange={set('site_web')} /></Field>
       <Field label="Notes">
