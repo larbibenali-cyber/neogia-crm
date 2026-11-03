@@ -124,6 +124,8 @@ function AnnoncesTab({ onChange }) {
           <select className="input w-auto" value={force} onChange={(e) => { setForce(e.target.value); setPage(1); }}>
             <option value="">Toutes attributions</option>
             <option value="fortes">Fortes (cité ou ≥ 70 %)</option>
+            <option value="cites">✓ Client cité dans l'annonce</option>
+            <option value="deduits">Client déduit (non cité)</option>
           </select>
           <select className="input w-auto" value={acces} onChange={(e) => { setAcces(e.target.value); setPage(1); }} title="Facilité d'accès au client (référencement fournisseurs)">
             <option value="">Tous accès référencement</option>
@@ -225,6 +227,65 @@ export function AccesBadge({ niveau, raison, manuel }) {
   );
 }
 
+// Argumentaire du niveau d'accès : sur quels éléments repose la pastille.
+// 1) le profil du client (raison écrite par l'agent ou par Larbi),
+// 2) ce que montrent les annonces (nombre de cabinets qui relaient ce client),
+// 3) la relation déjà construite dans le CRM, 4) l'origine du niveau.
+function AccesArgumentaire({ a }) {
+  const [open, setOpen] = useState(false);
+  const st = ACCES_STYLES[a.acces_effectif];
+  if (!st) return null;
+  const raison = String(a.acces_raison_effective || '');
+  const profil = raison.split(/\s*(?:\n|·|;)\s*/).map((s) => s.trim()).filter(Boolean);
+  const cab = a.acces_cabinets || {};
+  const rel = a.acces_relation;
+  const points = [];
+  profil.forEach((p) => points.push({ titre: 'Profil du client', texte: p }));
+  if (cab.n) {
+    const noms = (cab.noms || []).join(', ') + (cab.n > (cab.noms || []).length ? '…' : '');
+    let lecture;
+    if (cab.n >= 5) lecture = 'le client fait largement appel aux cabinets : entrer en sous-traitance d\'un référencé, ou se faire référencer sur un lot, est réaliste.';
+    else if (cab.n >= 2) lecture = 'plusieurs cabinets ont accès à ce client : il n\'est pas réservé à un seul prestataire.';
+    else lecture = 'un seul cabinet relaie ses besoins : il est peut-être le seul référencé, l\'accès passera sans doute par lui.';
+    points.push({ titre: 'Ce que montrent les annonces', texte: `${cab.annonces} annonce${cab.annonces > 1 ? 's' : ''} de ce client publiée${cab.annonces > 1 ? 's' : ''} par ${cab.n} cabinet${cab.n > 1 ? 's' : ''} en 60 jours (${noms}) — ${lecture}` });
+  }
+  if (rel) {
+    const nc = Number(rel.contacts) || 0; const ne = Number(rel.echanges) || 0;
+    let t;
+    if (String(rel.statut || '').startsWith('client')) t = `Déjà client de Neogia (${nc} contacts, ${ne} échanges) : tu as une porte d'entrée directe.`;
+    else if (ne > 0) t = `${nc} contact${nc > 1 ? 's' : ''} et ${ne} échange${ne > 1 ? 's' : ''} dans ton CRM${rel.dernier_echange ? `, le dernier le ${formatDate(rel.dernier_echange)}` : ''} : le compte est déjà ouvert, c'est un point d'appui pour passer outre le panel.`;
+    else if (nc > 0) t = `${nc} contact${nc > 1 ? 's' : ''} dans ton CRM mais aucun échange : compte à activer.`;
+    else t = 'Aucun contact ni échange dans ton CRM : tout est à construire avec ce client.';
+    points.push({ titre: 'Ta relation avec le client', texte: t });
+  } else {
+    points.push({ titre: 'Ta relation avec le client', texte: 'Client pas encore dans ton CRM : tout est à construire.' });
+  }
+  const origine = {
+    manuel: 'Niveau fixé par toi sur la fiche entreprise : l\'agent ne le change jamais.',
+    agent: 'Niveau estimé par l\'agent pour cette annonce (modifiable sur la fiche entreprise via « Modifier »).',
+    fiche: 'Niveau repris de la fiche entreprise (estimation automatique, modifiable via « Modifier »).',
+  }[a.acces_origine];
+
+  return (
+    <div className="mt-3 text-xs">
+      <button type="button" onClick={() => setOpen((o) => !o)} className={`inline-flex items-center gap-1 font-medium ${st.cls.split(' ').filter((c) => c.startsWith('text-')).join(' ')} hover:underline`}>
+        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Pourquoi « {st.label} » ?
+      </button>
+      {!open && profil[0] && <span className="text-slate2-500"> — {profil[0]}</span>}
+      {open && (
+        <div className={`mt-1.5 rounded-lg px-3 py-2 ${st.cls.split(' ').filter((c) => c.startsWith('bg-')).join(' ')}`}>
+          <ul className="space-y-1">
+            {points.map((p, i) => (
+              <li key={i} className="text-slate2-700"><span className="font-medium">{p.titre} : </span>{p.texte}</li>
+            ))}
+          </ul>
+          {origine && <p className="mt-1.5 text-slate2-500 italic">{origine}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AnnonceCard({ a, onConfirm, onAutre, onEcarter, onRestaurer }) {
   const [open, setOpen] = useState(false);
   const hypotheses = Array.isArray(a.hypotheses) ? a.hypotheses : [];
@@ -239,6 +300,7 @@ function AnnonceCard({ a, onConfirm, onAutre, onEcarter, onRestaurer }) {
           <div className="flex items-center gap-2 flex-wrap text-xs text-slate2-400">
             <span className="px-2 py-0.5 rounded-full bg-slate2-50 text-slate2-600 font-medium">{a.site}</span>
             <AccesBadge niveau={a.acces_effectif} raison={a.acces_raison_effective} manuel={a.acces_manuel} />
+            {a.client_nomme && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium bg-brand-50 text-brand"><Check size={11} />Client cité</span>}
             {a.intermediaire && <span>publiée par <span className="text-slate2-600">{a.intermediaire}</span></span>}
             <span className="flex items-center gap-1"><Calendar size={11} />{formatDate(a.date_publication || a.created_at)}</span>
           </div>
@@ -286,6 +348,8 @@ function AnnonceCard({ a, onConfirm, onAutre, onEcarter, onRestaurer }) {
           {hypotheses.length === 0 && !a.client_nomme && (
             <p className="mt-3 text-sm text-slate2-500">Aucun client du CRM ne correspond aux indices de cette annonce.</p>
           )}
+
+          <AccesArgumentaire a={a} />
 
           {decideurs.length > 0 && (
             <div className="mt-3 rounded-lg border border-slate2-100 bg-slate2-50/60 px-3 py-2">

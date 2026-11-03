@@ -40,6 +40,8 @@ router.get('/', async (req, res, next) => {
     else if (vue !== 'toutes') where.push(`a.statut = 'a_traiter'`);
     if (site) { where.push(`a.site = @site`); params.site = site; }
     if (force === 'fortes') where.push(`(a.client_nomme OR a.confiance >= 70)`);
+    else if (force === 'cites') where.push(`a.client_nomme`);
+    else if (force === 'deduits') where.push(`NOT a.client_nomme`);
     // Accès référencement effectif : le choix manuel sur la fiche entreprise
     // l'emporte, sinon l'estimation de l'agent sur l'annonce, sinon celle de la fiche.
     const ACCES = `(CASE WHEN e.acces_referencement_manuel THEN e.acces_referencement ELSE COALESCE(a.acces, e.acces_referencement) END)`;
@@ -59,7 +61,26 @@ router.get('/', async (req, res, next) => {
       SELECT a.*, e.nom AS entreprise_nom, ec.nom AS entreprise_confirmee_nom,
         ${ACCES} AS acces_effectif,
         CASE WHEN e.acces_referencement_manuel THEN e.acces_referencement_raison ELSE COALESCE(a.acces_raison, e.acces_referencement_raison) END AS acces_raison_effective,
-        COALESCE(e.acces_referencement_manuel, false) AS acces_manuel
+        COALESCE(e.acces_referencement_manuel, false) AS acces_manuel,
+        CASE WHEN e.acces_referencement_manuel THEN 'manuel'
+             WHEN a.acces IS NOT NULL THEN 'agent'
+             WHEN e.acces_referencement IS NOT NULL THEN 'fiche' END AS acces_origine,
+        -- Preuves recalculées à chaque affichage pour argumenter le niveau d'accès :
+        -- combien de cabinets relaient des besoins de ce client (= il accepte la
+        -- sous-traitance), et quelle relation Neogia a déjà avec lui dans le CRM.
+        (SELECT json_build_object('n', COUNT(DISTINCT x.intermediaire), 'annonces', COUNT(*),
+                  'noms', (array_agg(DISTINCT x.intermediaire))[1:6])
+           FROM annonces_scrapees x
+          WHERE x.created_at > now() - interval '60 days' AND x.intermediaire IS NOT NULL
+            AND ((a.entreprise_id IS NOT NULL AND x.entreprise_id = a.entreprise_id)
+              OR (a.entreprise_id IS NULL AND lower(x.hypotheses->0->>'entreprise_nom') = lower(a.hypotheses->0->>'entreprise_nom')))
+        ) AS acces_cabinets,
+        CASE WHEN a.entreprise_id IS NOT NULL THEN json_build_object(
+          'statut', e.statut,
+          'contacts', (SELECT COUNT(*) FROM contacts c WHERE c.entreprise_id = a.entreprise_id AND NOT c.archived),
+          'echanges', (SELECT COUNT(*) FROM echanges h WHERE h.entreprise_id = a.entreprise_id),
+          'dernier_echange', (SELECT MAX(h.date_echange) FROM echanges h WHERE h.entreprise_id = a.entreprise_id)
+        ) END AS acces_relation
       ${from} ${w}
       ORDER BY ${tri === 'acces' ? '' : 'COALESCE(a.date_publication, a.created_at::date) DESC,'}
         CASE ${ACCES} WHEN 'facile' THEN 0 WHEN 'moyen' THEN 1 WHEN 'difficile' THEN 3 ELSE 2 END,
