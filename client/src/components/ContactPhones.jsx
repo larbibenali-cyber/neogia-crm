@@ -9,8 +9,8 @@ import { formatPhoneFR, phoneHref } from '../lib/format';
  * car un prospect en a parfois plusieurs — un seul fixe reste supporté.
  * - N'affiche rien si aucun numéro n'est renseigné (pas de faux numéro/placeholder).
  * - N'affiche que le(s) numéro(s) réellement disponible(s).
- * - En mode `compact` (cartes, listes) : un seul mobile affiché, avec un badge
- *   "+N" s'il y en a d'autres (à voir sur la fiche du contact).
+ * - Tous les numéros (mobile(s) + fixe) sont affichés en toutes lettres, y compris
+ *   en mode `compact` (cartes, listes) : pas de badge "+N" qui masquerait un numéro.
  * - stopPropagation sur le clic : ces cartes sont elles-mêmes cliquables (navigation
  *   vers la fiche contact), on ne veut pas que "tel:" déclenche aussi la navigation.
  */
@@ -22,12 +22,9 @@ export default function ContactPhones({ contact, className = '', size = 'sm', co
   const textSize = size === 'sm' ? 'text-xs' : 'text-sm';
   const iconSize = size === 'sm' ? 12 : 14;
 
-  const shownMobiles = compact ? mobiles.slice(0, 1) : mobiles;
-  const hiddenCount = mobiles.length - shownMobiles.length;
-
   return (
     <div className={`flex items-center flex-wrap gap-x-3 gap-y-0.5 ${textSize} ${className}`}>
-      {shownMobiles.map((m) => (
+      {mobiles.map((m) => (
         <a
           key={m}
           href={phoneHref(m)}
@@ -39,7 +36,6 @@ export default function ContactPhones({ contact, className = '', size = 'sm', co
           {formatPhoneFR(m)}
         </a>
       ))}
-      {hiddenCount > 0 && <span className="text-slate2-400">+{hiddenCount}</span>}
       {fixe && (
         <a
           href={phoneHref(fixe)}
