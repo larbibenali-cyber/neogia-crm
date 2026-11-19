@@ -105,8 +105,8 @@ function AnnoncesTab({ onChange }) {
 
   const act = async (id, action, body, msg) => {
     try {
-      await api.post(`/annonces/${id}/${action}`, body || {});
-      toast(msg, 'success');
+      const r = await api.post(`/annonces/${id}/${action}`, body || {});
+      toast(typeof msg === 'function' ? msg(r) : msg, 'success');
       load();
       onChange();
     } catch (e) { toast(e.message, 'error'); }
@@ -174,7 +174,8 @@ function AnnoncesTab({ onChange }) {
             )}
             <AnnonceCard
               a={a}
-              onConfirm={(eid, nom) => act(a.id, 'confirmer', { entreprise_id: eid }, `Attribution confirmée : ${nom}.`)}
+              onConfirm={(eid, nom) => act(a.id, 'confirmer', eid ? { entreprise_id: eid } : { entreprise_nom: nom },
+                (r) => (r && r.entreprise_cree ? `Attribution confirmée : ${r.entreprise_nom}. Fiche entreprise créée dans le CRM.` : `Attribution confirmée : ${nom}.`))}
               onAutre={() => setAutre(a)}
               onEcarter={() => act(a.id, 'ecarter', null, 'Annonce écartée.')}
               onRestaurer={() => act(a.id, 'restaurer', null, 'Annonce remise à traiter.')}
@@ -335,8 +336,8 @@ function AnnonceCard({ a, onConfirm, onAutre, onEcarter, onRestaurer }) {
                       : <span className="text-sm font-medium text-slate2-800">{h.entreprise_nom} <span className="text-xs text-slate2-400 font-normal">(pas dans le CRM)</span></span>}
                     {h.raisons && <p className="text-xs text-slate2-500">{Array.isArray(h.raisons) ? h.raisons.join(' · ') : h.raisons}</p>}
                   </div>
-                  {a.statut === 'a_traiter' && h.entreprise_id && (
-                    <button className="btn btn-ghost text-xs py-1" onClick={() => onConfirm(h.entreprise_id, h.entreprise_nom)} title="Confirmer ce client">
+                  {a.statut === 'a_traiter' && (h.entreprise_id || h.entreprise_nom) && (
+                    <button className="btn btn-ghost text-xs py-1" onClick={() => onConfirm(h.entreprise_id, h.entreprise_nom)} title={h.entreprise_id ? 'Confirmer ce client' : 'Confirmer ce client (sa fiche entreprise sera créée dans le CRM)'}>
                       <Check size={12} /> C'est lui
                     </button>
                   )}
@@ -405,8 +406,8 @@ function AnnonceCard({ a, onConfirm, onAutre, onEcarter, onRestaurer }) {
         <div className="flex md:flex-col gap-2 shrink-0 flex-wrap">
           <a href={a.url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost"><ExternalLink size={14} /> Voir l'annonce</a>
           {a.statut === 'a_traiter' && <>
-            {a.client_nomme && a.entreprise_id && (
-              <button className="btn btn-primary" onClick={() => onConfirm(a.entreprise_id, a.entreprise_nom)}><Check size={14} /> Confirmer</button>
+            {a.client_nomme && (a.entreprise_id || hypotheses[0]?.entreprise_nom) && (
+              <button className="btn btn-primary" onClick={() => onConfirm(a.entreprise_id, a.entreprise_id ? a.entreprise_nom : hypotheses[0].entreprise_nom)}><Check size={14} /> Confirmer</button>
             )}
             <button className="btn btn-secondary" onClick={onAutre}><Building2 size={14} /> Autre client…</button>
             <button className="btn btn-secondary" onClick={onEcarter}><X size={14} /> Écarter</button>

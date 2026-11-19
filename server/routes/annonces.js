@@ -97,16 +97,48 @@ async function getAnnonce(id) {
 }
 
 // Confirme le client réel (une des hypothèses ou une autre entreprise du CRM).
+// Si le client proposé par l'agent n'est pas encore dans le CRM (entreprise_nom
+// sans entreprise_id), on le retrouve par son nom ou on crée sa fiche entreprise.
+function normalizeNom(nom) {
+  return String(nom || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]/g, '');
+}
+
+async function trouverOuCreerEntreprise(nomBrut) {
+  const complet = String(nomBrut || '').trim();
+  // « WTW (Willis Towers Watson France) » -> « WTW » ; on garde le nom complet comme variante de recherche.
+  const court = complet.replace(/\s*\(.*\)\s*$/, '').trim() || complet;
+  for (const n of [court, complet]) {
+    const e = await dbGet(
+      `SELECT id, nom FROM entreprises WHERE archived = false AND (nom_normalise = @norm OR nom ILIKE @nom) ORDER BY id LIMIT 1`,
+      { norm: normalizeNom(n), nom: n },
+    );
+    if (e) return { id: e.id, nom: e.nom, cree: false };
+  }
+  const row = await dbGet(
+    `INSERT INTO entreprises (nom, nom_normalise, statut, source_import, created_at, updated_at)
+     VALUES (@nom, @norm, 'prospect', 'Besoins scrappés', now(), now()) RETURNING id, nom`,
+    { nom: court, norm: normalizeNom(court) },
+  );
+  return { id: row.id, nom: row.nom, cree: true };
+}
+
 router.post('/:id/confirmer', async (req, res, next) => {
   try {
     if (!(await getAnnonce(req.params.id))) return res.status(404).json({ error: 'Annonce introuvable' });
-    const entrepriseId = Number(req.body?.entreprise_id);
+    let entrepriseId = Number(req.body?.entreprise_id);
+    let cree = false; let nom = null;
+    if (!entrepriseId && req.body?.entreprise_nom) {
+      const e = await trouverOuCreerEntreprise(req.body.entreprise_nom);
+      entrepriseId = e.id; cree = e.cree; nom = e.nom;
+    }
     if (!entrepriseId) return res.status(400).json({ error: 'Choisissez le client concerné.' });
     if (!(await dbGet(`SELECT id FROM entreprises WHERE id = ?`, [entrepriseId]))) {
       return res.status(400).json({ error: 'Entreprise introuvable' });
     }
-    await dbRun(`UPDATE annonces_scrapees SET statut = 'confirmee', entreprise_confirmee_id = ?, updated_at = now() WHERE id = ?`, [entrepriseId, req.params.id]);
-    res.json({ ok: true });
+    await dbRun(`UPDATE annonces_scrapees SET statut = 'confirmee', entreprise_confirmee_id = @e,
+                 entreprise_id = COALESCE(entreprise_id, @e), updated_at = now() WHERE id = @id`,
+      { e: entrepriseId, id: Number(req.params.id) });
+    res.json({ ok: true, entreprise_id: entrepriseId, entreprise_cree: cree, entreprise_nom: nom });
   } catch (e) { next(e); }
 });
 
