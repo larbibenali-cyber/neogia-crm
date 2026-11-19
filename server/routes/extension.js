@@ -22,17 +22,37 @@ function normalizeNom(nom) {
 router.get('/ping', (req, res) => res.json({ ok: true }));
 
 // ---- Recherche d'entreprise par nom (avant création éventuelle) ----
+// Tolère les petites variantes d'orthographe (pluriel/singulier, accent,
+// espace en trop, faute de frappe...) via la similarité par trigrammes
+// (pg_trgm) : sans ça, "Groupement Mousquetaires" (avec un s) ne retrouvait
+// jamais une entreprise déjà enregistrée sous "Groupement Mousquetaire"
+// (sans le s), car ni l'égalité stricte du nom normalisé, ni le ILIKE
+// substring, ne tolèrent une seule lettre de différence — l'extension
+// concluait alors à tort que l'entreprise n'existait pas et forçait une
+// nouvelle création. Le seuil de 0.3 est calibré sur les données réelles du
+// CRM : l'entreprise correctement orthographiée score généralement > 0.8,
+// la suivante la plus proche (une entreprise sans rapport) reste < 0.25.
+const ENTREPRISE_FUZZY_THRESHOLD = 0.3;
+
 router.post('/lookup-entreprise', async (req, res, next) => {
   try {
     const nom = String(req.body.nom || '').trim();
     if (!nom) return res.json({ matches: [] });
     const norm = normalizeNom(nom);
     const matches = await dbAll(`
-      SELECT id, nom FROM entreprises
-      WHERE archived = false AND (nom_normalise = @norm OR nom ILIKE @like)
-      ORDER BY (nom_normalise = @norm) DESC, nom ASC
+      SELECT id, nom,
+        (nom_normalise = @norm) AS is_exact,
+        GREATEST(similarity(nom, @nom), similarity(nom_normalise, @norm)) AS score
+      FROM entreprises
+      WHERE archived = false AND (
+        nom_normalise = @norm
+        OR nom ILIKE @like
+        OR similarity(nom, @nom) > ${ENTREPRISE_FUZZY_THRESHOLD}
+        OR similarity(nom_normalise, @norm) > ${ENTREPRISE_FUZZY_THRESHOLD}
+      )
+      ORDER BY is_exact DESC, score DESC, nom ASC
       LIMIT 5
-    `, { norm, like: `%${nom}%` });
+    `, { norm, nom, like: `%${nom}%` });
     res.json({ matches });
   } catch (err) { next(err); }
 });
