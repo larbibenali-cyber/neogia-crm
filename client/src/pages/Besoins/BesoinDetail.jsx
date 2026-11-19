@@ -73,6 +73,16 @@ export default function BesoinDetail() {
     load();
   };
 
+  // Permet de retirer une étape saisie par erreur (ex : "Entretien réalisé"
+  // coché à tort) sans supprimer tout le positionnement. Ne change pas le
+  // statut courant : à faire via le sélecteur de statut si besoin.
+  const deleteEtape = async (p, etape) => {
+    if (!(await confirm({ title: 'Supprimer cette étape ?', message: 'Cette entrée sera retirée de l\'historique. Cette action est irréversible.' }))) return;
+    await api.del(`/positionnements/${p.id}/etapes/${etape.id}`);
+    toast('Étape supprimée.', 'success');
+    load();
+  };
+
   return (
     <div className="space-y-5">
       <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm text-slate2-500 hover:text-brand">
@@ -182,12 +192,19 @@ export default function BesoinDetail() {
                         <div className="text-xs font-semibold text-slate2-500 mb-1.5">Historique</div>
                         <ul className="space-y-1">
                           {p.etapes.map((e) => (
-                            <li key={e.id} className="text-xs text-slate2-500 flex gap-2">
+                            <li key={e.id} className="text-xs text-slate2-500 flex items-start gap-2 group">
                               <span className="text-slate2-400 shrink-0">{formatDate(e.date_etape)}</span>
-                              <span>
+                              <span className="flex-1">
                                 {e.statut_apres && <strong className="text-slate2-700">{e.statut_apres} — </strong>}
                                 {e.commentaire_original || (e.type_etape === 'positionnement' ? 'Positionnement créé' : e.type_etape === 'changement_statut' ? 'Changement de statut' : '')}
                               </span>
+                              <button
+                                className="shrink-0 text-slate2-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Supprimer cette étape"
+                                onClick={() => deleteEtape(p, e)}
+                              >
+                                <Trash2 size={12} />
+                              </button>
                             </li>
                           ))}
                         </ul>
