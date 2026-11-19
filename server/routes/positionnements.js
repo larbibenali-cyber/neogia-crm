@@ -147,6 +147,20 @@ router.post('/:id/etapes', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ---- Suppression d'une étape individuelle de l'historique ----
+// Permet de corriger une saisie erronée (ex: statut "Entretien réalisé" coché
+// par erreur) sans avoir à supprimer tout le positionnement. Ne touche pas au
+// statut courant du positionnement : si l'étape supprimée avait changé le
+// statut, l'utilisateur le remet comme il veut via le sélecteur de statut.
+router.delete('/:id/etapes/:etapeId', async (req, res, next) => {
+  try {
+    const etape = await dbGet('SELECT * FROM positionnement_etapes WHERE id = ? AND positionnement_id = ?', [req.params.etapeId, req.params.id]);
+    if (!etape) return res.status(404).json({ error: 'Étape introuvable.' });
+    await dbRun('DELETE FROM positionnement_etapes WHERE id = ?', [req.params.etapeId]);
+    res.json({ deleted: true });
+  } catch (err) { next(err); }
+});
+
 router.delete('/:id', async (req, res, next) => {
   try {
     const existing = await dbGet('SELECT * FROM positionnements WHERE id = ?', [req.params.id]);
