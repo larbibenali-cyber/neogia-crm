@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   History, Search, X, Building2,
   Phone as PhoneIcon, Mail as MailIcon, Linkedin, Users, Video, MessageCircle,
@@ -50,6 +50,7 @@ function dayLabel(key) {
 }
 
 export default function Echanges() {
+  const navigate = useNavigate();
   const [echanges, setEchanges] = useState(null);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
@@ -169,9 +170,20 @@ export default function Echanges() {
                         </div>
                         {t && <span className="text-xs text-slate2-400 shrink-0">{t}</span>}
                       </div>
-                      {e.objet && <p className="text-sm font-medium text-slate2-700 mt-1">{e.objet}</p>}
-                      {e.compte_rendu && <p className="text-sm text-slate2-600 mt-1 whitespace-pre-wrap">{e.compte_rendu}</p>}
-                      {e.prochaine_action && <p className="text-xs text-brand-700 mt-1">Prochaine action : {e.prochaine_action}</p>}
+                      {/* Le contenu de l'échange ouvre directement la fiche du contact (onglet
+                          "Historique des échanges", ouvert par défaut) — sans avoir à cliquer
+                          précisément sur le nom de la personne au-dessus. */}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => navigate(`/clients/contact/${e.contact_id}`)}
+                        onKeyDown={(ev) => { if (ev.key === 'Enter') navigate(`/clients/contact/${e.contact_id}`); }}
+                        className="cursor-pointer rounded-lg -mx-1.5 px-1.5 hover:bg-slate2-50 transition-colors"
+                      >
+                        {e.objet && <p className="text-sm font-medium text-slate2-700 mt-1">{e.objet}</p>}
+                        {e.compte_rendu && <p className="text-sm text-slate2-600 mt-1 whitespace-pre-wrap">{e.compte_rendu}</p>}
+                        {e.prochaine_action && <p className="text-xs text-brand-700 mt-1">Prochaine action : {e.prochaine_action}</p>}
+                      </div>
                     </div>
                   </div>
                 </li>
