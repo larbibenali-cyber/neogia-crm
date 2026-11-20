@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   History, Search, X, Building2,
   Phone as PhoneIcon, Mail as MailIcon, Linkedin, Users, Video, MessageCircle,
@@ -7,7 +7,7 @@ import {
 import { api } from '../lib/api';
 import { Loading, EmptyState } from '../components/ui';
 import { usePickLists } from '../lib/PickListsContext';
-import { OBJET_PRESETS } from '../components/EchangeFormModal';
+import EchangeFormModal, { OBJET_PRESETS } from '../components/EchangeFormModal';
 
 const TYPE_ICONS = { appel: PhoneIcon, email: MailIcon, linkedin: Linkedin, reunion: Users, visio: Video, autre: MessageCircle };
 
@@ -50,12 +50,12 @@ function dayLabel(key) {
 }
 
 export default function Echanges() {
-  const navigate = useNavigate();
   const [echanges, setEchanges] = useState(null);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [type, setType] = useState('');
   const [objet, setObjet] = useState('');
+  const [echangeModal, setEchangeModal] = useState({ open: false, echange: null });
   const { getOptions, getLabel } = usePickLists();
 
   const load = useCallback(() => {
@@ -170,14 +170,14 @@ export default function Echanges() {
                         </div>
                         {t && <span className="text-xs text-slate2-400 shrink-0">{t}</span>}
                       </div>
-                      {/* Le contenu de l'échange ouvre directement la fiche du contact (onglet
-                          "Historique des échanges", ouvert par défaut) — sans avoir à cliquer
-                          précisément sur le nom de la personne au-dessus. */}
+                      {/* Le contenu de l'échange ouvre une fenêtre de modification sur place
+                          (sans quitter le Journal des échanges) — pas besoin de rouvrir la
+                          fiche du contact pour corriger ou compléter cet échange. */}
                       <div
                         role="button"
                         tabIndex={0}
-                        onClick={() => navigate(`/clients/contact/${e.contact_id}`)}
-                        onKeyDown={(ev) => { if (ev.key === 'Enter') navigate(`/clients/contact/${e.contact_id}`); }}
+                        onClick={() => setEchangeModal({ open: true, echange: e })}
+                        onKeyDown={(ev) => { if (ev.key === 'Enter') setEchangeModal({ open: true, echange: e }); }}
                         className="cursor-pointer rounded-lg -mx-1.5 px-1.5 hover:bg-slate2-50 transition-colors"
                       >
                         {e.objet && <p className="text-sm font-medium text-slate2-700 mt-1">{e.objet}</p>}
@@ -192,6 +192,13 @@ export default function Echanges() {
           </ul>
         </div>
       ))}
+
+      <EchangeFormModal
+        open={echangeModal.open}
+        echange={echangeModal.echange}
+        onClose={() => setEchangeModal({ open: false, echange: null })}
+        onSaved={load}
+      />
     </div>
   );
 }
