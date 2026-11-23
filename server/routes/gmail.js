@@ -34,4 +34,15 @@ router.post('/disconnect', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Lecture seule des messages envoyés/reçus depuis une date donnée — réservée
+// au module Priorisation activité, aucune écriture possible via cette route.
+router.get('/messages', async (req, res, next) => {
+  try {
+    const since = req.query.since;
+    if (!since) return res.status(400).json({ error: 'Paramètre "since" requis (date ISO).' });
+    const result = await gmailService.listMessagesSince(since);
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
