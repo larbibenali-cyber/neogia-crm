@@ -13,6 +13,7 @@ import CandidatDetail from './pages/Candidats/CandidatDetail';
 import BesoinsList from './pages/Besoins/BesoinsList';
 import BesoinDetail from './pages/Besoins/BesoinDetail';
 import Echanges from './pages/Echanges';
+import Priorisation from './pages/Priorisation';
 import EmailTemplates from './pages/EmailTemplates';
 import Parametres from './pages/Parametres';
 import Leads from './pages/Leads';
@@ -65,6 +66,7 @@ function AppShell() {
             <Route path="/besoins" element={<BesoinsList />} />
             <Route path="/besoins/:id" element={<BesoinDetail />} />
             <Route path="/echanges" element={<Echanges />} />
+            <Route path="/priorisation" element={<Priorisation />} />
             <Route path="/leads" element={<Leads />} />
             <Route path="/briefs" element={<Briefs />} />
             <Route path="/besoins-scrappes" element={<BesoinsScrappes />} />
