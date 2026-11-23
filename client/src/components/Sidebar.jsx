@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, UserSquare2, Briefcase, History, Settings, Radar, ScanSearch, FileText } from 'lucide-react';
+import { LayoutDashboard, Building2, UserSquare2, Briefcase, History, Settings, Radar, ScanSearch, FileText, ListChecks } from 'lucide-react';
 import logo from '../assets/neogia-logo.png';
 
 const NAV = [
@@ -9,6 +9,7 @@ const NAV = [
   { to: '/candidats', label: 'Candidats', icon: UserSquare2 },
   { to: '/besoins', label: 'Besoins', icon: Briefcase },
   { to: '/echanges', label: 'Échanges', icon: History },
+  { to: '/priorisation', label: 'Priorisation activité', icon: ListChecks },
 ];
 
 // Pages alimentées par les agents Claude, regroupées sous « Échanges ».
