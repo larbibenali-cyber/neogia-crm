@@ -13,7 +13,13 @@ const { dbGet, dbRun } = require('../../db/pg');
 // Scope unique et le plus restreint possible : gmail.compose couvre à la
 // fois la création de brouillons et l'envoi (pas besoin d'un scope plus
 // large comme gmail.modify ou mail.google.com).
-const SCOPES = ['https://www.googleapis.com/auth/gmail.compose'];
+// Scope combiné : compose (brouillons/envoi pour les campagnes email) +
+// readonly (lecture seule des messages envoyés/reçus, pour le module
+// Priorisation activité — jamais d'écriture via ce second scope).
+const SCOPES = [
+  'https://www.googleapis.com/auth/gmail.compose',
+  'https://www.googleapis.com/auth/gmail.readonly',
+];
 
 function getEncryptionKey() {
   const hex = process.env.TOKEN_ENCRYPTION_KEY;
@@ -220,4 +226,51 @@ async function sendMessage({ to, subject, body, attachments }) {
   return { messageId: data.id, from: email };
 }
 
-module.exports = { getAuthUrl, handleOAuthCallback, getConnection, disconnect, sendMessage, SCOPES };
+// Extrait le corps texte brut d'un message Gmail (gère les messages simples
+// et les multipart, en ne prenant que la partie text/plain).
+function extractPlainTextBody(payload) {
+  if (!payload) return '';
+  if (payload.mimeType === 'text/plain' && payload.body && payload.body.data) {
+    return Buffer.from(payload.body.data, 'base64').toString('utf8');
+  }
+  for (const part of payload.parts || []) {
+    const found = extractPlainTextBody(part);
+    if (found) return found;
+  }
+  return '';
+}
+
+// Liste les messages envoyés/reçus depuis une date donnée (ISO), avec
+// l'essentiel (expéditeur, destinataires, objet, extrait, corps texte) —
+// lecture seule, utilisée par le module Priorisation activité pour analyser
+// l'activité e-mail sans jamais rien modifier ni envoyer.
+async function listMessagesSince(sinceISO, { maxResults = 200 } = {}) {
+  const { client, email } = await getAuthenticatedClient();
+  const gmail = google.gmail({ version: 'v1', auth: client });
+  const afterEpoch = Math.floor(new Date(sinceISO).getTime() / 1000);
+  const { data } = await gmail.users.messages.list({
+    userId: 'me',
+    q: `after:${afterEpoch} (in:sent OR in:inbox)`,
+    maxResults,
+  });
+  const ids = (data.messages || []).map((m) => m.id);
+  const messages = [];
+  for (const id of ids) {
+    const { data: msg } = await gmail.users.messages.get({ userId: 'me', id, format: 'full' });
+    const headers = Object.fromEntries((msg.payload?.headers || []).map((h) => [h.name.toLowerCase(), h.value]));
+    messages.push({
+      id: msg.id,
+      threadId: msg.threadId,
+      labelIds: msg.labelIds || [],
+      date: headers.date || null,
+      from: headers.from || null,
+      to: headers.to || null,
+      subject: headers.subject || null,
+      snippet: msg.snippet || '',
+      body: extractPlainTextBody(msg.payload),
+    });
+  }
+  return { email, messages };
+}
+
+module.exports = { getAuthUrl, handleOAuthCallback, getConnection, disconnect, sendMessage, listMessagesSince, SCOPES };
